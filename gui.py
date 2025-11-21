@@ -3,8 +3,7 @@ from tkinter import messagebox
 from tkinter import ttk
 import requests
 import json
-
-API_URL = "http://127.0.0.1:5000"
+from config import API_URL
 
 
 class AngkringanApp:
@@ -20,10 +19,47 @@ class AngkringanApp:
         self.keranjang = []
         self.produk_list = []
         self.style = ttk.Style()
-        self.style.theme_use('clam')
-        self.style.configure('TButton', font=('Segoe UI', 11), padding=6)
-        self.style.configure('TLabel', font=('Segoe UI', 11), background="#f5f5f5")
+        self.setup_styles()
         self.create_login_screen()
+
+    def setup_styles(self):
+        # Colors
+        PRIMARY_COLOR = "#3498db"
+        SUCCESS_COLOR = "#2ecc71"
+        DANGER_COLOR = "#e74c3c"
+        LIGHT_COLOR = "#ecf0f1"
+        DARK_COLOR = "#2c3e50"
+
+        self.style.theme_use('clam')
+
+        # General Button Style
+        self.style.configure('TButton', font=('Segoe UI', 11), padding=8, borderwidth=0)
+        self.style.map('TButton',
+            foreground=[('pressed', DARK_COLOR), ('active', DARK_COLOR)],
+            background=[('pressed', '!disabled', LIGHT_COLOR), ('active', LIGHT_COLOR)])
+
+        # Custom Button Styles
+        self.style.configure('Success.TButton', foreground='white', background=SUCCESS_COLOR)
+        self.style.map('Success.TButton', background=[('active', '#27ae60')])
+
+        self.style.configure('Danger.TButton', foreground='white', background=DANGER_COLOR)
+        self.style.map('Danger.TButton', background=[('active', '#c0392b')])
+
+        self.style.configure('Info.TButton', foreground='white', background=PRIMARY_COLOR)
+        self.style.map('Info.TButton', background=[('active', '#2980b9')])
+
+        self.style.configure('TNotebook.Tab', font=('Segoe UI', 12, 'bold'), padding=[10, 5])
+        self.style.configure('TLabel', font=('Segoe UI', 11), background="#ffffff")
+        self.root.configure(bg="#ffffff")
+
+    def handle_api_call(self, method, endpoint, **kwargs):
+        try:
+            response = requests.request(method, f"{API_URL}{endpoint}", **kwargs)
+            response.raise_for_status()  # Raise HTTPError for bad responses (4xx or 5xx)
+            return response
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror("API Error", f"Gagal berkomunikasi dengan server: {e}")
+            return None
 
     def clear_screen(self):
         for widget in self.root.winfo_children():
@@ -48,15 +84,15 @@ class AngkringanApp:
         username = self.username_var.get()
         password = self.password_var.get()
 
-        response = requests.post(f"{API_URL}/login", json={'username': username, 'password': password})
+        response = self.handle_api_call('post', '/login', json={'username': username, 'password': password})
 
-        if response.status_code == 200:
+        if response and response.status_code == 200:
             user = response.json()
             self.role = user['role_karyawan']
             self.id_karyawan = user['id_karyawan']
             messagebox.showinfo("Login", f"Selamat datang, {username}")
             self.create_main_menu()
-        else:
+        elif response:
             messagebox.showerror("Login Gagal", "Username atau password salah!")
 
     def create_main_menu(self):
@@ -75,10 +111,10 @@ class AngkringanApp:
 
         tk.Label(frame, text="Pilih Tampilan", font=("Segoe UI", 16, "bold"), bg="#ffffff").pack(pady=20)
 
-        tk.Button(frame, text="Dasbor Admin", font=('Segoe UI', 12), command=self.admin_dashboard_screen).pack(pady=10)
-        tk.Button(frame, text="Antarmuka Kasir", font=('Segoe UI', 12), command=self.kasir_transaksi_screen).pack(pady=10)
+        ttk.Button(frame, text="📊 Dasbor Admin", style='Info.TButton', command=self.admin_dashboard_screen).pack(pady=10, fill="x", padx=20)
+        ttk.Button(frame, text="🛒 Antarmuka Kasir", style='Info.TButton', command=self.kasir_transaksi_screen).pack(pady=10, fill="x", padx=20)
 
-        tk.Button(frame, text="Logout", font=('Segoe UI', 10), bg="#607d8b", fg="white", command=self.create_login_screen).pack(pady=20)
+        ttk.Button(frame, text="Keluar", command=self.create_login_screen).pack(pady=20)
 
     def admin_dashboard_screen(self):
         self.clear_screen()
@@ -91,10 +127,10 @@ class AngkringanApp:
         employee_frame = ttk.Frame(notebook)
         report_frame = ttk.Frame(notebook)
 
-        notebook.add(dashboard_frame, text="Dashboard")
-        notebook.add(menu_frame, text="Manajemen Menu")
-        notebook.add(employee_frame, text="Manajemen Karyawan")
-        notebook.add(report_frame, text="Laporan")
+        notebook.add(dashboard_frame, text="📊 Dashboard")
+        notebook.add(menu_frame, text="🍔 Manajemen Menu")
+        notebook.add(employee_frame, text="👥 Manajemen Karyawan")
+        notebook.add(report_frame, text="📄 Laporan")
 
         self.create_dashboard_tab(dashboard_frame)
         self.create_menu_tab(menu_frame)
@@ -113,19 +149,37 @@ class AngkringanApp:
         for widget in parent.winfo_children():
             widget.destroy()
 
-        label = tk.Label(parent, text="Dashboard Admin", font=("Segoe UI", 20, "bold"))
-        label.pack(pady=20)
+        parent.configure(style='TFrame')
 
-        response = requests.get(f"{API_URL}/stats")
-        if response.status_code == 200:
+        # Header
+        tk.Label(parent, text="📊 Dashboard Admin", font=("Segoe UI", 24, "bold"), background="#ffffff").pack(pady=(10, 20))
+
+        # Stats Cards
+        stats_frame = tk.Frame(parent, bg="#ffffff")
+        stats_frame.pack(pady=10, padx=20, fill="x")
+
+        response = self.handle_api_call('get', '/stats')
+        if response and response.status_code == 200:
             stats = response.json()
             total_transactions = stats.get('total_transactions', 0)
-            total_revenue = stats.get('total_revenue', 0)
+            total_revenue = stats.get('total_revenue', 0) if stats.get('total_revenue') is not None else 0
         else:
             total_transactions, total_revenue = 0, 0
 
-        tk.Label(parent, text=f"Total Transaksi: {total_transactions}", font=("Segoe UI", 14)).pack(pady=10)
-        tk.Label(parent, text=f"Total Pendapatan: Rp {total_revenue:,.2f}", font=("Segoe UI", 14)).pack(pady=10)
+        # Card for Total Transactions
+        card1 = tk.Frame(stats_frame, bg="#ecf0f1", bd=5, relief="groove")
+        card1.grid(row=0, column=0, padx=20, pady=10, sticky="ew")
+        tk.Label(card1, text="Total Transaksi", font=("Segoe UI", 14, "bold"), bg="#ecf0f1").pack(pady=(10, 0))
+        tk.Label(card1, text=f"{total_transactions}", font=("Segoe UI", 28, "bold"), bg="#ecf0f1").pack(pady=(0, 10))
+
+        # Card for Total Revenue
+        card2 = tk.Frame(stats_frame, bg="#ecf0f1", bd=5, relief="groove")
+        card2.grid(row=0, column=1, padx=20, pady=10, sticky="ew")
+        tk.Label(card2, text="Total Pendapatan", font=("Segoe UI", 14, "bold"), bg="#ecf0f1").pack(pady=(10, 0))
+        tk.Label(card2, text=f"Rp {total_revenue:,.0f}", font=("Segoe UI", 28, "bold"), bg="#ecf0f1").pack(pady=(0, 10))
+
+        stats_frame.grid_columnconfigure(0, weight=1)
+        stats_frame.grid_columnconfigure(1, weight=1)
 
     def create_menu_tab(self, parent):
         tk.Button(parent, text="Lihat Daftar Menu", font=('Segoe UI', 11), bg="#2196f3", fg="white", width=22, command=self.show_menu_list).pack(pady=7)
@@ -149,8 +203,8 @@ class AngkringanApp:
         def refresh_employee_list():
             for i in tree.get_children():
                 tree.delete(i)
-            response = requests.get(f"{API_URL}/employees")
-            if response.status_code == 200:
+            response = self.handle_api_call('get', '/employees')
+            if response and response.status_code == 200:
                 employees = response.json()
                 for emp in employees:
                     tree.insert("", "end", values=(emp['id_karyawan'], emp['role_karyawan'], emp['username_login']))
@@ -190,9 +244,9 @@ class AngkringanApp:
                 'password': password_var.get()
             }
             if employee_data:
-                requests.put(f"{API_URL}/employees/{id_var.get()}", json=data)
+                self.handle_api_call('put', f"/employees/{id_var.get()}", json=data)
             else:
-                requests.post(f"{API_URL}/employees", json=data)
+                self.handle_api_call('post', '/employees', json=data)
             refresh_callback()
             popup.destroy()
 
@@ -200,7 +254,7 @@ class AngkringanApp:
 
     def delete_employee_popup(self, employee_id, refresh_callback):
         if messagebox.askyesno("Konfirmasi", "Apakah Anda yakin ingin menghapus karyawan ini?"):
-            requests.delete(f"{API_URL}/employees/{employee_id}")
+            self.handle_api_call('delete', f"/employees/{employee_id}")
             refresh_callback()
 
     def create_report_tab(self, parent):
@@ -256,18 +310,21 @@ class AngkringanApp:
         button_frame_cart = tk.Frame(cart_panel, bg="#ffffff")
         button_frame_cart.pack(fill="x", pady=5)
 
-        tk.Button(button_frame_cart, text="Hapus Item", font=('Segoe UI', 10), bg="#f44336", fg="white", command=lambda: self.hapus_item_keranjang(cart_tree, total_label)).pack(side="left", padx=5, expand=True)
-        tk.Button(button_frame_cart, text="Kosongkan", font=('Segoe UI', 10), bg="#607d8b", fg="white", command=lambda: self.kosongkan_keranjang(cart_tree, total_label)).pack(side="right", padx=5, expand=True)
+        ttk.Button(button_frame_cart, text="➖", width=2, command=lambda: self.kurangi_jumlah(cart_tree, total_label)).pack(side="left", padx=5)
+        ttk.Button(button_frame_cart, text="➕", width=2, command=lambda: self.tambah_jumlah(cart_tree, total_label)).pack(side="left", padx=5)
+
+        ttk.Button(button_frame_cart, text="🗑️ Hapus", style='Danger.TButton', command=lambda: self.hapus_item_keranjang(cart_tree, total_label)).pack(side="left", padx=10, expand=True)
+        ttk.Button(button_frame_cart, text="Kosongkan", command=lambda: self.kosongkan_keranjang(cart_tree, total_label)).pack(side="right", padx=5)
 
         total_label = tk.Label(cart_panel, text="Total: Rp 0", font=("Segoe UI", 14, "bold"), bg="#ffffff")
         total_label.pack(pady=10)
 
-        tk.Button(cart_panel, text="Bayar", font=('Segoe UI', 12, 'bold'), bg="#4caf50", fg="white", height=2, command=lambda: self.proses_pembayaran(total_label, nomor_meja_var.get(), nama_pelanggan_var.get())).pack(fill="x", padx=5, pady=10)
+        ttk.Button(cart_panel, text="Bayar", style='Success.TButton', command=lambda: self.proses_pembayaran(total_label, nomor_meja_var.get(), nama_pelanggan_var.get())).pack(fill="x", padx=5, pady=10)
 
         # Action buttons
         action_frame_kasir = tk.Frame(cart_panel, bg="#ffffff")
         action_frame_kasir.pack(fill="x", pady=5, side="bottom")
-        tk.Button(action_frame_kasir, text="Riwayat Transaksi", font=('Segoe UI', 10), command=self.show_history_popup).pack(fill="x", expand=True)
+        ttk.Button(action_frame_kasir, text="Riwayat Transaksi", command=self.show_history_popup).pack(fill="x", expand=True)
 
         # Navigation buttons for cashier
         nav_frame_kasir = tk.Frame(cart_panel, bg="#ffffff")
@@ -279,8 +336,8 @@ class AngkringanApp:
         tk.Button(nav_frame_kasir, text="Logout", font=('Segoe UI', 10), bg="#607d8b", fg="white", command=self.create_login_screen).pack(side="left", padx=5, expand=True)
         tk.Button(nav_frame_kasir, text="Tutup Aplikasi", font=('Segoe UI', 10), bg="#f44336", fg="white", command=self.root.quit).pack(side="right", padx=5, expand=True)
 
-        response = requests.get(f"{API_URL}/products")
-        if response.status_code == 200:
+        response = self.handle_api_call('get', '/products')
+        if response and response.status_code == 200:
             self.produk_list = response.json()
         else:
             self.produk_list = []
@@ -351,6 +408,36 @@ class AngkringanApp:
 
         self.update_keranjang_list(cart_tree, total_label)
 
+    def tambah_jumlah(self, cart_tree, total_label):
+        selected_item = cart_tree.selection()
+        if not selected_item:
+            return
+
+        item_values = cart_tree.item(selected_item, 'values')
+        nama_produk = item_values[0]
+
+        for item in self.keranjang:
+            if item['nama_produk'] == nama_produk:
+                item['jumlah'] += 1
+                break
+        self.update_keranjang_list(cart_tree, total_label)
+
+    def kurangi_jumlah(self, cart_tree, total_label):
+        selected_item = cart_tree.selection()
+        if not selected_item:
+            return
+
+        item_values = cart_tree.item(selected_item, 'values')
+        nama_produk = item_values[0]
+
+        for item in self.keranjang:
+            if item['nama_produk'] == nama_produk:
+                item['jumlah'] -= 1
+                if item['jumlah'] == 0:
+                    self.keranjang.remove(item)
+                break
+        self.update_keranjang_list(cart_tree, total_label)
+
     def kosongkan_keranjang(self, cart_tree, total_label):
         self.keranjang.clear()
         self.update_keranjang_list(cart_tree, total_label)
@@ -364,20 +451,40 @@ class AngkringanApp:
 
         popup = tk.Toplevel(self.root)
         popup.title("Pembayaran")
-        popup.geometry("300x200")
+        popup.geometry("400x350")
 
-        tk.Label(popup, text=f"Total: Rp {total_harga}", font=('Segoe UI', 14)).pack(pady=10)
+        tk.Label(popup, text="Pembayaran", font=("Segoe UI", 16, "bold")).pack(pady=10)
+        tk.Label(popup, text=f"Total Tagihan: Rp {total_harga:,.0f}", font=("Segoe UI", 14)).pack(pady=5)
+
+        metode_pembayaran_var = tk.StringVar(value="Tunai")
+        tk.Radiobutton(popup, text="Tunai", variable=metode_pembayaran_var, value="Tunai").pack()
+        tk.Radiobutton(popup, text="Kartu", variable=metode_pembayaran_var, value="Kartu").pack()
+
+        bayar_frame = tk.Frame(popup)
+        bayar_frame.pack(pady=10)
+        tk.Label(bayar_frame, text="Jumlah Bayar: Rp").pack(side="left")
+        jumlah_bayar_var = tk.IntVar()
+        tk.Entry(bayar_frame, textvariable=jumlah_bayar_var).pack(side="left")
+
+        kembalian_label = tk.Label(popup, text="Kembalian: Rp 0", font=("Segoe UI", 12, "bold"))
+        kembalian_label.pack(pady=10)
+
+        def hitung_kembalian(*args):
+            try:
+                bayar = jumlah_bayar_var.get()
+                kembalian = bayar - total_harga
+                kembalian_label.config(text=f"Kembalian: Rp {kembalian:,.0f}")
+            except:
+                pass
+        jumlah_bayar_var.trace("w", hitung_kembalian)
 
         def on_payment_complete():
             data = {
-                "id_karyawan": self.id_karyawan,
-                "keranjang": self.keranjang,
-                "total_harga": total_harga,
-                "nomor_meja": nomor_meja,
-                "nama_pelanggan": nama_pelanggan
+                "id_karyawan": self.id_karyawan, "keranjang": self.keranjang, "total_harga": total_harga,
+                "nomor_meja": nomor_meja, "nama_pelanggan": nama_pelanggan
             }
-            response = requests.post(f"{API_URL}/transactions", json=data)
-            if response.status_code == 200:
+            response = self.handle_api_call('post', '/transactions', json=data)
+            if response and response.status_code == 200:
                 messagebox.showinfo("Sukses", "Transaksi berhasil disimpan.")
                 self.show_struk(self.keranjang, total_harga, nomor_meja, nama_pelanggan)
                 popup.destroy()
@@ -385,7 +492,7 @@ class AngkringanApp:
             else:
                 messagebox.showerror("Error", "Gagal menyimpan transaksi.")
 
-        tk.Button(popup, text="Konfirmasi Bayar", command=on_payment_complete).pack(pady=10)
+        ttk.Button(popup, text="Konfirmasi & Cetak Struk", style='Success.TButton', command=on_payment_complete).pack(pady=20)
 
     def show_struk(self, keranjang, total, nomor_meja, nama_pelanggan):
         struk_win = tk.Toplevel(self.root)
@@ -418,8 +525,8 @@ class AngkringanApp:
         tree.heading("pelanggan", text="Pelanggan")
         tree.pack(fill="both", expand=True, padx=10, pady=10)
 
-        response = requests.get(f"{API_URL}/history/{self.id_karyawan}")
-        if response.status_code == 200:
+        response = self.handle_api_call('get', f"/history/{self.id_karyawan}")
+        if response and response.status_code == 200:
             history = response.json()
             for item in history:
                 tree.insert("", "end", values=(item['tanggal_transaksi'], f"Rp {item['total_harga']}", item['nomor_meja'], item['nama_pelanggan']))
@@ -440,8 +547,8 @@ class AngkringanApp:
         tk.Label(frame, text="Laporan Penjualan", font=("Segoe UI", 16, "bold"), bg="#ffffff").pack(pady=(18, 8))
         ttk.Separator(frame, orient='horizontal').pack(fill='x', padx=20, pady=5)
 
-        response = requests.get(f"{API_URL}/reports")
-        if response.status_code == 200:
+        response = self.handle_api_call('get', '/reports')
+        if response and response.status_code == 200:
             laporan = response.json()
         else:
             laporan = []
@@ -467,16 +574,13 @@ class AngkringanApp:
         tk.Label(frame, text="Daftar Menu", font=("Segoe UI", 16, "bold"), bg="#ffffff").pack(pady=(18, 8))
         ttk.Separator(frame, orient='horizontal').pack(fill='x', padx=20, pady=5)
         listbox = tk.Listbox(frame, font=('Segoe UI', 11), width=32, height=8)
-        try:
-            response = requests.get(f"{API_URL}/products")
-            if response.status_code == 200:
-                menus = response.json()
-                for menu in menus:
-                    listbox.insert(tk.END, f"{menu['id_produk']}. {menu['nama_produk']} - Rp{menu['harga']} ({menu['stok']} stok)")
-            else:
-                listbox.insert(tk.END, "Error: Gagal mengambil data menu")
-        except Exception as e:
-            listbox.insert(tk.END, f"Error: {e}")
+        response = self.handle_api_call('get', '/products')
+        if response and response.status_code == 200:
+            menus = response.json()
+            for menu in menus:
+                listbox.insert(tk.END, f"{menu['id_produk']}. {menu['nama_produk']} - Rp{menu['harga']} ({menu['stok']} stok)")
+        else:
+            listbox.insert(tk.END, "Error: Gagal mengambil data menu")
         listbox.pack(pady=10)
         tk.Button(frame, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=18, command=self.create_main_menu).pack(pady=10)
 
@@ -521,15 +625,12 @@ class AngkringanApp:
                 "id_produk": id_var.get(), "nama_produk": nama_var.get(), "kategori_produk": kategori_var.get(),
                 "harga": harga_var.get(), "stok": stok_var.get()
             }
-            try:
-                response = requests.post(f"{API_URL}/products", json=data)
-                if response.status_code == 201:
-                    messagebox.showinfo("Sukses", "Produk berhasil ditambahkan!")
-                    self.create_main_menu()
-                else:
-                    messagebox.showerror("Error", "Gagal menambahkan produk")
-            except Exception as e:
-                messagebox.showerror("Error", str(e))
+            response = self.handle_api_call('post', '/products', json=data)
+            if response and response.status_code == 201:
+                messagebox.showinfo("Sukses", "Produk berhasil ditambahkan!")
+                self.create_main_menu()
+            elif response:
+                messagebox.showerror("Error", "Gagal menambahkan produk")
         tk.Button(scroll_frame, text="Tambah", font=('Segoe UI', 11), bg="#4caf50", fg="white", width=18, command=submit).pack(pady=12)
         tk.Button(scroll_frame, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=18, command=self.create_main_menu).pack(pady=5)
 
@@ -574,15 +675,12 @@ class AngkringanApp:
                 "nama_produk": nama_var.get(), "kategori_produk": kategori_var.get(),
                 "harga": harga_var.get(), "stok": stok_var.get()
             }
-            try:
-                response = requests.put(f"{API_URL}/products/{id_var.get()}", json=data)
-                if response.status_code == 200:
-                    messagebox.showinfo("Sukses", "Produk berhasil diupdate!")
-                    self.create_main_menu()
-                else:
-                    messagebox.showerror("Error", "Gagal mengupdate produk")
-            except Exception as e:
-                messagebox.showerror("Error", str(e))
+            response = self.handle_api_call('put', f"/products/{id_var.get()}", json=data)
+            if response and response.status_code == 200:
+                messagebox.showinfo("Sukses", "Produk berhasil diupdate!")
+                self.create_main_menu()
+            elif response:
+                messagebox.showerror("Error", "Gagal mengupdate produk")
         tk.Button(scroll_frame, text="Update", font=('Segoe UI', 11), bg="#ff9800", fg="white", width=18, command=submit).pack(pady=12)
         tk.Button(scroll_frame, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=18, command=self.create_main_menu).pack(pady=5)
 
@@ -596,15 +694,12 @@ class AngkringanApp:
         tk.Label(frame, text="ID Produk", bg="#ffffff").pack(anchor='w', padx=40)
         tk.Entry(frame, textvariable=id_var, font=('Segoe UI', 11), width=22).pack(padx=40)
         def submit():
-            try:
-                response = requests.delete(f"{API_URL}/products/{id_var.get()}")
-                if response.status_code == 200:
-                    messagebox.showinfo("Sukses", "Produk berhasil dihapus!")
-                    self.create_main_menu()
-                else:
-                    messagebox.showerror("Error", "Gagal menghapus produk")
-            except Exception as e:
-                messagebox.showerror("Error", str(e))
+            response = self.handle_api_call('delete', f"/products/{id_var.get()}")
+            if response and response.status_code == 200:
+                messagebox.showinfo("Sukses", "Produk berhasil dihapus!")
+                self.create_main_menu()
+            elif response:
+                messagebox.showerror("Error", "Gagal menghapus produk")
         tk.Button(frame, text="Hapus", font=('Segoe UI', 11), bg="#f44336", fg="white", width=18, command=submit).pack(pady=12)
         tk.Button(frame, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=18, command=self.create_main_menu).pack(pady=5)
 
