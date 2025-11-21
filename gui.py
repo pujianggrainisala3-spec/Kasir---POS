@@ -94,7 +94,7 @@ class AngkringanApp:
         tk.Label(frame, text="Jumlah", bg="#ffffff", font=('Segoe UI', 10, 'bold')).pack(anchor='w', padx=40, pady=(10,0))
         jumlah_entry = tk.Entry(frame, textvariable=jumlah_var, font=('Segoe UI', 11), width=26, bg='#f9f9f9', relief=tk.GROOVE)
         jumlah_entry.pack(padx=40, pady=(0,8))
-
+        
         def tambah_ke_keranjang():
             idx = produk_combo.current()
             if idx == -1:
@@ -105,15 +105,15 @@ class AngkringanApp:
                 messagebox.showerror("Error", "Jumlah harus lebih dari 0!")
                 return
             produk = produk_list[idx]
-
+            
             # Check stok against what is already in cart + new amount
             current_in_cart = sum(item['jumlah'] for item in keranjang if item['id_produk'] == produk['id_produk'])
             if (current_in_cart + jumlah) > produk['stok']:
                 messagebox.showerror("Error", f"Stok tidak cukup! Sisa: {produk['stok'] - current_in_cart}")
                 return
-
+            
             subtotal = produk['harga'] * jumlah
-
+            
             # Add to cart (if item exists, update quantity)
             found = False
             for item in keranjang:
@@ -130,7 +130,7 @@ class AngkringanApp:
                     'jumlah': jumlah,
                     'subtotal': subtotal
                 })
-
+            
             update_keranjang_list()
             jumlah_var.set(0)
             produk_var.set("")
@@ -140,7 +140,7 @@ class AngkringanApp:
         keranjang_listbox.pack(padx=20, pady=8)
         total_label = tk.Label(frame, text="Total: Rp0", font=('Segoe UI', 12, 'bold'), bg="#ffffff", fg="#4caf50")
         total_label.pack(pady=(10,0))
-
+        
         def update_keranjang_list():
             keranjang_listbox.delete(0, tk.END)
             total = 0
@@ -154,51 +154,51 @@ class AngkringanApp:
             if not keranjang:
                 messagebox.showerror("Error", "Keranjang kosong!")
                 return
-
+            
             total = sum(item['subtotal'] for item in keranjang)
-
+            
             payment_win = tk.Toplevel(self.root)
             payment_win.title("Pembayaran")
             payment_win.geometry("340x300")
-
+            
             tk.Label(payment_win, text="Pembayaran", font=("Segoe UI", 16, "bold")).pack(pady=(18, 8))
             tk.Label(payment_win, text=f"Total Tagihan: Rp{total}", font=("Segoe UI", 12, "bold"), fg="#ff5722").pack(pady=5)
-
+            
             tk.Label(payment_win, text="Nominal Bayar (Rp):", font=("Segoe UI", 10)).pack(pady=(10,0))
             nominal_var = tk.IntVar()
             nominal_entry = tk.Entry(payment_win, textvariable=nominal_var, font=('Segoe UI', 12), justify='center')
             nominal_entry.pack(pady=5)
             nominal_entry.focus_set()
-
+            
             def process_payment():
                 try:
                     nominal = nominal_var.get()
                 except:
                     messagebox.showerror("Error", "Input tidak valid!", parent=payment_win)
                     return
-
+                
                 if nominal < total:
                     messagebox.showerror("Pembayaran Gagal", f"Uang Kurang Rp{total - nominal}", parent=payment_win)
                 else:
                     kembalian = nominal - total
-
+                    
                     # Save to DB
                     try:
                         # HARDCODED EMPLOYEE ID 'K02' (KASIR) - ideally fetch from login session
-                        id_karyawan = 'K02'
+                        id_karyawan = 'K02' 
                         id_transaksi = db.save_transaksi(id_karyawan, keranjang, total)
-
+                        
                         # Save Receipt
                         self.save_receipt_to_file(keranjang, total, nominal, kembalian, id_transaksi)
-
+                        
                         if kembalian > 0:
                             messagebox.showinfo("Pembayaran Berhasil", f"Pembayaran Sukses!\nKembalian: Rp{kembalian}", parent=payment_win)
                         else:
                             messagebox.showinfo("Pembayaran Berhasil", "Pembayaran Sukses! Uang Pas.", parent=payment_win)
-
+                        
                         payment_win.destroy()
                         self.create_main_menu()
-
+                        
                     except Exception as e:
                          messagebox.showerror("Error Database", str(e), parent=payment_win)
 
@@ -254,7 +254,7 @@ class AngkringanApp:
         frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER, width=340, height=340)
         tk.Label(frame, text="Daftar Menu", font=("Segoe UI", 16, "bold"), bg="#ffffff").pack(pady=(18, 8))
         ttk.Separator(frame, orient='horizontal').pack(fill='x', padx=20, pady=5)
-
+        
         # Scrollbar for Listbox
         list_frame = tk.Frame(frame)
         list_frame.pack(pady=10)
@@ -263,14 +263,14 @@ class AngkringanApp:
         scrollbar.config(command=listbox.yview)
         scrollbar.pack(side="right", fill="y")
         listbox.pack(side="left", fill="both")
-
+        
         try:
             menus = db.get_all_produk()
             for menu in menus:
                 listbox.insert(tk.END, f"{menu['id_produk']}. {menu['nama_produk']} - Rp{menu['harga']} ({menu['stok']} stok)")
         except Exception as e:
             listbox.insert(tk.END, f"Error: {e}")
-
+        
         tk.Button(frame, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=18, command=self.create_main_menu).pack(pady=10)
 
     def add_menu_screen(self):
@@ -305,7 +305,7 @@ class AngkringanApp:
         ]:
             tk.Label(scroll_frame, text=label, bg="#ffffff", font=('Segoe UI', 10, 'bold')).pack(anchor='w', padx=40, pady=(10,0))
             tk.Entry(scroll_frame, textvariable=var, **entry_opts).pack(padx=40, pady=(0,8))
-
+        
         def submit():
             try:
                 db.insert_produk(id_var.get(), nama_var.get(), kategori_var.get(), harga_var.get(), stok_var.get())
@@ -348,7 +348,7 @@ class AngkringanApp:
         ]:
             tk.Label(scroll_frame, text=label, bg="#ffffff", font=('Segoe UI', 10, 'bold')).pack(anchor='w', padx=40, pady=(10,0))
             tk.Entry(scroll_frame, textvariable=var, **entry_opts).pack(padx=40, pady=(0,8))
-
+        
         def submit():
             try:
                 db.update_produk(id_var.get(), nama_var.get(), kategori_var.get(), harga_var.get(), stok_var.get())
@@ -373,7 +373,7 @@ class AngkringanApp:
             if not prod_id:
                 messagebox.showerror("Error", "ID Produk tidak boleh kosong!")
                 return
-
+            
             # Validation: Check if product exists
             existing = db.get_produk_by_id(prod_id)
             if not existing:
