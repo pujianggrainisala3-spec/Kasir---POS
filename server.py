@@ -83,11 +83,9 @@ def process_transaction():
     id_karyawan = data.get('id_karyawan')
     keranjang = data.get('keranjang')
     total_harga = data.get('total_harga')
-    nomor_meja = data.get('nomor_meja')
-    nama_pelanggan = data.get('nama_pelanggan')
 
     try:
-        db.save_transaksi(id_karyawan, keranjang, total_harga, nomor_meja, nama_pelanggan)
+        db.save_transaksi(id_karyawan, keranjang, total_harga)
         for item in keranjang:
             db.update_stok_produk(item['id_produk'], item['jumlah'])
         return jsonify({'message': 'Transaksi berhasil'}), 200

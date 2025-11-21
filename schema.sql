@@ -73,9 +73,7 @@ CREATE TABLE `tb_pemesanan` (
   `total_harga` int DEFAULT NULL,
   `tanggal_transaksi` date DEFAULT NULL,
   `waktu_transaksi` timestamp NULL DEFAULT NULL,
-  `id_karyawan` varchar(20) DEFAULT NULL,
-  `nomor_meja` varchar(50) DEFAULT NULL,
-  `nama_pelanggan` varchar(100) DEFAULT NULL
+  `id_karyawan` varchar(20) DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- --------------------------------------------------------

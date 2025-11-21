@@ -295,18 +295,6 @@ class AngkringanApp:
         cart_tree.heading("harga", text="Harga")
         cart_tree.pack(fill="both", expand=True, padx=5, pady=5)
 
-        # Customer info inputs
-        customer_frame = tk.Frame(cart_panel, bg="#ffffff")
-        customer_frame.pack(fill="x", pady=5)
-
-        tk.Label(customer_frame, text="No. Meja:", font=('Segoe UI', 10), bg="#ffffff").grid(row=0, column=0, padx=5, pady=2, sticky="w")
-        nomor_meja_var = tk.StringVar()
-        tk.Entry(customer_frame, textvariable=nomor_meja_var, font=('Segoe UI', 10)).grid(row=0, column=1, padx=5, pady=2, sticky="ew")
-
-        tk.Label(customer_frame, text="Pelanggan:", font=('Segoe UI', 10), bg="#ffffff").grid(row=1, column=0, padx=5, pady=2, sticky="w")
-        nama_pelanggan_var = tk.StringVar()
-        tk.Entry(customer_frame, textvariable=nama_pelanggan_var, font=('Segoe UI', 10)).grid(row=1, column=1, padx=5, pady=2, sticky="ew")
-
         button_frame_cart = tk.Frame(cart_panel, bg="#ffffff")
         button_frame_cart.pack(fill="x", pady=5)
 
@@ -319,7 +307,7 @@ class AngkringanApp:
         total_label = tk.Label(cart_panel, text="Total: Rp 0", font=("Segoe UI", 14, "bold"), bg="#ffffff")
         total_label.pack(pady=10)
 
-        ttk.Button(cart_panel, text="Bayar", style='Success.TButton', command=lambda: self.proses_pembayaran(total_label, nomor_meja_var.get(), nama_pelanggan_var.get())).pack(fill="x", padx=5, pady=10)
+        ttk.Button(cart_panel, text="Bayar", style='Success.TButton', command=lambda: self.proses_pembayaran(total_label)).pack(fill="x", padx=5, pady=10)
 
         # Action buttons
         action_frame_kasir = tk.Frame(cart_panel, bg="#ffffff")
@@ -442,7 +430,7 @@ class AngkringanApp:
         self.keranjang.clear()
         self.update_keranjang_list(cart_tree, total_label)
 
-    def proses_pembayaran(self, total_label, nomor_meja, nama_pelanggan):
+    def proses_pembayaran(self, total_label):
         if not self.keranjang:
             messagebox.showerror("Error", "Keranjang kosong!")
             return
@@ -480,13 +468,12 @@ class AngkringanApp:
 
         def on_payment_complete():
             data = {
-                "id_karyawan": self.id_karyawan, "keranjang": self.keranjang, "total_harga": total_harga,
-                "nomor_meja": nomor_meja, "nama_pelanggan": nama_pelanggan
+                "id_karyawan": self.id_karyawan, "keranjang": self.keranjang, "total_harga": total_harga
             }
             response = self.handle_api_call('post', '/transactions', json=data)
             if response and response.status_code == 200:
                 messagebox.showinfo("Sukses", "Transaksi berhasil disimpan.")
-                self.show_struk(self.keranjang, total_harga, nomor_meja, nama_pelanggan)
+                self.show_struk(self.keranjang, total_harga)
                 popup.destroy()
                 self.kasir_transaksi_screen()
             else:
@@ -494,14 +481,12 @@ class AngkringanApp:
 
         ttk.Button(popup, text="Konfirmasi & Cetak Struk", style='Success.TButton', command=on_payment_complete).pack(pady=20)
 
-    def show_struk(self, keranjang, total, nomor_meja, nama_pelanggan):
+    def show_struk(self, keranjang, total):
         struk_win = tk.Toplevel(self.root)
         struk_win.title("Struk Transaksi")
         struk_win.geometry("350x450")
 
         tk.Label(struk_win, text="--- Struk Transaksi ---", font=("Courier", 14, "bold")).pack(pady=10)
-        tk.Label(struk_win, text=f"No. Meja: {nomor_meja}", font=("Courier", 12)).pack(anchor='w', padx=20)
-        tk.Label(struk_win, text=f"Pelanggan: {nama_pelanggan}", font=("Courier", 12)).pack(anchor='w', padx=20)
 
         for item in keranjang:
             tk.Label(struk_win, text=f"{item['nama_produk']} x{item['jumlah']} = Rp{item['harga'] * item['jumlah']}", font=("Courier", 12)).pack(anchor='w', padx=20)
@@ -518,18 +503,16 @@ class AngkringanApp:
 
         tk.Label(popup, text="Riwayat Transaksi Anda", font=("Segoe UI", 16, "bold")).pack(pady=10)
 
-        tree = ttk.Treeview(popup, columns=("tanggal", "total", "meja", "pelanggan"), show="headings")
+        tree = ttk.Treeview(popup, columns=("tanggal", "total"), show="headings")
         tree.heading("tanggal", text="Tanggal")
         tree.heading("total", text="Total")
-        tree.heading("meja", text="No. Meja")
-        tree.heading("pelanggan", text="Pelanggan")
         tree.pack(fill="both", expand=True, padx=10, pady=10)
 
         response = self.handle_api_call('get', f"/history/{self.id_karyawan}")
         if response and response.status_code == 200:
             history = response.json()
             for item in history:
-                tree.insert("", "end", values=(item['tanggal_transaksi'], f"Rp {item['total_harga']}", item['nomor_meja'], item['nama_pelanggan']))
+                tree.insert("", "end", values=(item['tanggal_transaksi'], f"Rp {item['total_harga']}"))
 
     def laporan_penjualan_screen(self, parent_frame=None):
         if parent_frame is None:
