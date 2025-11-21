@@ -17,6 +17,61 @@ def get_all_produk():
     conn.close()
     return result
 
+def get_transaction_history_by_cashier(id_karyawan):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM tb_pemesanan WHERE id_karyawan = %s ORDER BY tanggal_transaksi DESC, waktu_transaksi DESC", (id_karyawan,))
+    result = cursor.fetchall()
+    conn.close()
+    return result
+
+def get_sales_stats():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT COUNT(*) as total_transactions, SUM(total_harga) as total_revenue FROM tb_pemesanan")
+    stats = cursor.fetchone()
+    conn.close()
+    return stats
+
+def get_user_by_credentials(username, password):
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM tb_karyawan WHERE username_login = %s AND password_login = %s", (username, password))
+    user = cursor.fetchone()
+    conn.close()
+    return user
+
+def get_all_employees():
+    conn = get_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM tb_karyawan")
+    result = cursor.fetchall()
+    conn.close()
+    return result
+
+def insert_employee(id_karyawan, role, username, password):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("INSERT INTO tb_karyawan (id_karyawan, role_karyawan, username_login, password_login) VALUES (%s, %s, %s, %s)",
+                   (id_karyawan, role, username, password))
+    conn.commit()
+    conn.close()
+
+def update_employee(id_karyawan, role, username, password):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE tb_karyawan SET role_karyawan=%s, username_login=%s, password_login=%s WHERE id_karyawan=%s",
+                   (role, username, password, id_karyawan))
+    conn.commit()
+    conn.close()
+
+def delete_employee(id_karyawan):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM tb_karyawan WHERE id_karyawan=%s", (id_karyawan,))
+    conn.commit()
+    conn.close()
+
 def update_stok_produk(id_produk, jumlah):
     conn = get_connection()
     cursor = conn.cursor()
@@ -51,7 +106,10 @@ def save_transaksi(id_karyawan, keranjang, total_harga):
     cursor = conn.cursor()
     tanggal = datetime.date.today()
     waktu = datetime.datetime.now().strftime('%H:%M:%S')
-    cursor.execute("INSERT INTO tb_pemesanan (id_transaksi, total_harga, tanggal_transaksi, waktu_transaksi, id_karyawan) VALUES (UUID(), %s, %s, %s, %s)", (total_harga, tanggal, waktu, id_karyawan))
+    cursor.execute(
+        "INSERT INTO tb_pemesanan (id_transaksi, total_harga, tanggal_transaksi, waktu_transaksi, id_karyawan) VALUES (UUID(), %s, %s, %s, %s)",
+        (total_harga, tanggal, waktu, id_karyawan)
+    )
     conn.commit()
     cursor.execute("SELECT LAST_INSERT_ID() AS id_transaksi")
     id_transaksi = cursor.fetchone()[0]
