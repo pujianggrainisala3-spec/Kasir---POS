@@ -72,7 +72,6 @@ class AngkringanApp:
             tk.Button(frame, text="Tambah Menu", font=('Segoe UI', 11), bg="#4caf50", fg="white", width=22, command=self.add_menu_screen).pack(pady=7)
             tk.Button(frame, text="Update Menu", font=('Segoe UI', 11), bg="#ff9800", fg="white", width=22, command=self.update_menu_screen).pack(pady=7)
             tk.Button(frame, text="Hapus Menu", font=('Segoe UI', 11), bg="#f44336", fg="white", width=22, command=self.delete_menu_screen).pack(pady=7)
-            tk.Button(frame, text="Laporan Penjualan", font=('Segoe UI', 11), bg="#009688", fg="white", width=22, command=self.laporan_penjualan_screen).pack(pady=7)
         elif self.role == "kasir":
             tk.Button(frame, text="Transaksi", font=('Segoe UI', 11), bg="#4caf50", fg="white", width=22, command=self.kasir_transaksi_screen).pack(pady=7)
         tk.Button(frame, text="Keluar", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=22, command=self.create_login_screen).pack(pady=18)
@@ -159,7 +158,7 @@ class AngkringanApp:
 
             payment_win = tk.Toplevel(self.root)
             payment_win.title("Pembayaran")
-            payment_win.geometry("340x300")
+            payment_win.geometry("340x360") # Increased height to fit buttons
 
             tk.Label(payment_win, text="Pembayaran", font=("Segoe UI", 16, "bold")).pack(pady=(18, 8))
             tk.Label(payment_win, text=f"Total Tagihan: Rp{total}", font=("Segoe UI", 12, "bold"), fg="#ff5722").pack(pady=5)
@@ -202,9 +201,14 @@ class AngkringanApp:
                     except Exception as e:
                          messagebox.showerror("Error Database", str(e), parent=payment_win)
 
-            tk.Button(payment_win, text="Bayar", font=('Segoe UI', 11, 'bold'), bg="#4caf50", fg="white", width=15, command=process_payment).pack(pady=20)
+            # Button container
+            btn_frame = tk.Frame(payment_win)
+            btn_frame.pack(pady=20)
 
-        tk.Button(frame, text="Lanjut Pembayaran", font=('Segoe UI', 11), bg="#4caf50", fg="white", width=22, command=open_payment_popup).pack(pady=18)
+            tk.Button(btn_frame, text="Bayar", font=('Segoe UI', 11, 'bold'), bg="#4caf50", fg="white", width=12, command=process_payment).pack(side='left', padx=5)
+            tk.Button(btn_frame, text="Kembali", font=('Segoe UI', 11), bg="#f44336", fg="white", width=12, command=payment_win.destroy).pack(side='left', padx=5)
+
+        tk.Button(frame, text="Checkout", font=('Segoe UI', 11), bg="#4caf50", fg="white", width=22, command=open_payment_popup).pack(pady=18)
         tk.Button(frame, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=22, command=self.create_main_menu).pack(pady=5)
 
     def save_receipt_to_file(self, keranjang, total, bayar, kembalian, id_transaksi):
@@ -226,27 +230,6 @@ class AngkringanApp:
                 f.write("====================================\n")
         except Exception as e:
             print(f"Failed to save receipt: {e}")
-
-    def laporan_penjualan_screen(self):
-        self.clear_screen()
-        frame = tk.Frame(self.root, bg="#ffffff", bd=2, relief=tk.RIDGE)
-        frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER, width=420, height=480)
-        tk.Label(frame, text="Laporan Penjualan", font=("Segoe UI", 16, "bold"), bg="#ffffff").pack(pady=(18, 8))
-        ttk.Separator(frame, orient='horizontal').pack(fill='x', padx=20, pady=5)
-        laporan = db.get_laporan_penjualan()
-        tree = ttk.Treeview(frame, columns=("id_transaksi", "tanggal", "total", "kasir"), show="headings", height=12)
-        tree.heading("id_transaksi", text="ID Transaksi")
-        tree.heading("tanggal", text="Tanggal")
-        tree.heading("total", text="Total")
-        tree.heading("kasir", text="Kasir")
-        tree.column("id_transaksi", width=120)
-        tree.column("tanggal", width=80)
-        tree.column("total", width=80)
-        tree.column("kasir", width=80)
-        for row in laporan:
-            tree.insert("", tk.END, values=(row['id_transaksi'], row['tanggal_transaksi'], row['total_harga'], row['username_login']))
-        tree.pack(padx=20, pady=10)
-        tk.Button(frame, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=22, command=self.create_main_menu).pack(pady=10)
 
     def show_menu_list(self):
         self.clear_screen()
