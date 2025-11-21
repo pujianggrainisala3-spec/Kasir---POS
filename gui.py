@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import messagebox
 from tkinter import ttk
 import db_utils as db
+import datetime
+import os
 
 
 class AngkringanApp:
@@ -25,6 +27,7 @@ class AngkringanApp:
 
     def create_login_screen(self):
         self.clear_screen()
+        self.role = None # Reset role on logout
         frame = tk.Frame(self.root, bg="#ffffff", bd=2, relief=tk.RIDGE)
         frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER, width=340, height=320)
         tk.Label(frame, text="Angkringan POS", font=("Segoe UI", 20, "bold"), bg="#ffffff").pack(pady=(18, 8))
@@ -51,6 +54,8 @@ class AngkringanApp:
         user = result
         if user:
             self.role = user['role_karyawan']
+            self.username_var.set("") # Clear credentials
+            self.password_var.set("")
             messagebox.showinfo("Login", f"Selamat datang, {username}")
             self.create_main_menu()
         else:
@@ -89,6 +94,7 @@ class AngkringanApp:
         tk.Label(frame, text="Jumlah", bg="#ffffff", font=('Segoe UI', 10, 'bold')).pack(anchor='w', padx=40, pady=(10,0))
         jumlah_entry = tk.Entry(frame, textvariable=jumlah_var, font=('Segoe UI', 11), width=26, bg='#f9f9f9', relief=tk.GROOVE)
         jumlah_entry.pack(padx=40, pady=(0,8))
+
         def tambah_ke_keranjang():
             idx = produk_combo.current()
             if idx == -1:
@@ -99,25 +105,42 @@ class AngkringanApp:
                 messagebox.showerror("Error", "Jumlah harus lebih dari 0!")
                 return
             produk = produk_list[idx]
-            if jumlah > produk['stok']:
-                messagebox.showerror("Error", "Stok tidak cukup!")
+
+            # Check stok against what is already in cart + new amount
+            current_in_cart = sum(item['jumlah'] for item in keranjang if item['id_produk'] == produk['id_produk'])
+            if (current_in_cart + jumlah) > produk['stok']:
+                messagebox.showerror("Error", f"Stok tidak cukup! Sisa: {produk['stok'] - current_in_cart}")
                 return
+
             subtotal = produk['harga'] * jumlah
-            keranjang.append({
-                'id_produk': produk['id_produk'],
-                'nama_produk': produk['nama_produk'],
-                'harga': produk['harga'],
-                'jumlah': jumlah,
-                'subtotal': subtotal
-            })
+
+            # Add to cart (if item exists, update quantity)
+            found = False
+            for item in keranjang:
+                if item['id_produk'] == produk['id_produk']:
+                    item['jumlah'] += jumlah
+                    item['subtotal'] += subtotal
+                    found = True
+                    break
+            if not found:
+                keranjang.append({
+                    'id_produk': produk['id_produk'],
+                    'nama_produk': produk['nama_produk'],
+                    'harga': produk['harga'],
+                    'jumlah': jumlah,
+                    'subtotal': subtotal
+                })
+
             update_keranjang_list()
             jumlah_var.set(0)
             produk_var.set("")
+
         tk.Button(frame, text="Tambah ke Keranjang", font=('Segoe UI', 11), bg="#2196f3", fg="white", width=22, command=tambah_ke_keranjang).pack(pady=8)
         keranjang_listbox = tk.Listbox(frame, font=('Segoe UI', 11), width=40, height=7)
         keranjang_listbox.pack(padx=20, pady=8)
         total_label = tk.Label(frame, text="Total: Rp0", font=('Segoe UI', 12, 'bold'), bg="#ffffff", fg="#4caf50")
         total_label.pack(pady=(10,0))
+
         def update_keranjang_list():
             keranjang_listbox.delete(0, tk.END)
             total = 0
@@ -125,29 +148,84 @@ class AngkringanApp:
                 keranjang_listbox.insert(tk.END, f"{item['nama_produk']} x{item['jumlah']} = Rp{item['subtotal']}")
                 total += item['subtotal']
             total_label.config(text=f"Total: Rp{total}")
-        def proses_transaksi():
+            return total
+
+        def open_payment_popup():
             if not keranjang:
                 messagebox.showerror("Error", "Keranjang kosong!")
                 return
+
             total = sum(item['subtotal'] for item in keranjang)
-            # Update stok produk
-            for item in keranjang:
-                db.update_stok_produk(item['id_produk'], item['jumlah'])
-            # Simpan transaksi ke database
-            id_karyawan = 'K02' # hardcoded, sebaiknya ambil dari session login
-            db.save_transaksi(id_karyawan, keranjang, total)
-            show_struk(keranjang, total)
-        def show_struk(keranjang, total):
-            struk_win = tk.Toplevel(self.root)
-            struk_win.title("Struk Transaksi")
-            struk_win.geometry("340x400")
-            tk.Label(struk_win, text="Struk Transaksi", font=("Segoe UI", 16, "bold"), bg="#ffffff").pack(pady=(18, 8))
-            for item in keranjang:
-                tk.Label(struk_win, text=f"{item['nama_produk']} x{item['jumlah']} = Rp{item['subtotal']}", font=('Segoe UI', 11), bg="#ffffff").pack(anchor='w', padx=40)
-            tk.Label(struk_win, text=f"Total: Rp{total}", font=('Segoe UI', 12, 'bold'), fg="#4caf50", bg="#ffffff").pack(pady=18)
-            tk.Button(struk_win, text="Tutup", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=18, command=lambda: [struk_win.destroy(), self.create_main_menu()]).pack(pady=10)
-        tk.Button(frame, text="Proses Transaksi", font=('Segoe UI', 11), bg="#4caf50", fg="white", width=22, command=proses_transaksi).pack(pady=18)
+
+            payment_win = tk.Toplevel(self.root)
+            payment_win.title("Pembayaran")
+            payment_win.geometry("340x300")
+
+            tk.Label(payment_win, text="Pembayaran", font=("Segoe UI", 16, "bold")).pack(pady=(18, 8))
+            tk.Label(payment_win, text=f"Total Tagihan: Rp{total}", font=("Segoe UI", 12, "bold"), fg="#ff5722").pack(pady=5)
+
+            tk.Label(payment_win, text="Nominal Bayar (Rp):", font=("Segoe UI", 10)).pack(pady=(10,0))
+            nominal_var = tk.IntVar()
+            nominal_entry = tk.Entry(payment_win, textvariable=nominal_var, font=('Segoe UI', 12), justify='center')
+            nominal_entry.pack(pady=5)
+            nominal_entry.focus_set()
+
+            def process_payment():
+                try:
+                    nominal = nominal_var.get()
+                except:
+                    messagebox.showerror("Error", "Input tidak valid!", parent=payment_win)
+                    return
+
+                if nominal < total:
+                    messagebox.showerror("Pembayaran Gagal", f"Uang Kurang Rp{total - nominal}", parent=payment_win)
+                else:
+                    kembalian = nominal - total
+
+                    # Save to DB
+                    try:
+                        # HARDCODED EMPLOYEE ID 'K02' (KASIR) - ideally fetch from login session
+                        id_karyawan = 'K02'
+                        id_transaksi = db.save_transaksi(id_karyawan, keranjang, total)
+
+                        # Save Receipt
+                        self.save_receipt_to_file(keranjang, total, nominal, kembalian, id_transaksi)
+
+                        if kembalian > 0:
+                            messagebox.showinfo("Pembayaran Berhasil", f"Pembayaran Sukses!\nKembalian: Rp{kembalian}", parent=payment_win)
+                        else:
+                            messagebox.showinfo("Pembayaran Berhasil", "Pembayaran Sukses! Uang Pas.", parent=payment_win)
+
+                        payment_win.destroy()
+                        self.create_main_menu()
+
+                    except Exception as e:
+                         messagebox.showerror("Error Database", str(e), parent=payment_win)
+
+            tk.Button(payment_win, text="Bayar", font=('Segoe UI', 11, 'bold'), bg="#4caf50", fg="white", width=15, command=process_payment).pack(pady=20)
+
+        tk.Button(frame, text="Lanjut Pembayaran", font=('Segoe UI', 11), bg="#4caf50", fg="white", width=22, command=open_payment_popup).pack(pady=18)
         tk.Button(frame, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=22, command=self.create_main_menu).pack(pady=5)
+
+    def save_receipt_to_file(self, keranjang, total, bayar, kembalian, id_transaksi):
+        filename = f"struk_{id_transaksi}.txt"
+        try:
+            with open(filename, "w") as f:
+                f.write("========== ANGKRINGAN POS ==========\n")
+                f.write(f"ID Transaksi: {id_transaksi}\n")
+                f.write(f"Tanggal     : {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write("====================================\n")
+                for item in keranjang:
+                    f.write(f"{item['nama_produk']:<20} x{item['jumlah']:<3} {item['subtotal']:>8}\n")
+                f.write("====================================\n")
+                f.write(f"Total       : Rp {total}\n")
+                f.write(f"Tunai       : Rp {bayar}\n")
+                f.write(f"Kembali     : Rp {kembalian}\n")
+                f.write("====================================\n")
+                f.write("      Terima Kasih Kunjungannya     \n")
+                f.write("====================================\n")
+        except Exception as e:
+            print(f"Failed to save receipt: {e}")
 
     def laporan_penjualan_screen(self):
         self.clear_screen()
@@ -161,87 +239,14 @@ class AngkringanApp:
         tree.heading("tanggal", text="Tanggal")
         tree.heading("total", text="Total")
         tree.heading("kasir", text="Kasir")
+        tree.column("id_transaksi", width=120)
+        tree.column("tanggal", width=80)
+        tree.column("total", width=80)
+        tree.column("kasir", width=80)
         for row in laporan:
             tree.insert("", tk.END, values=(row['id_transaksi'], row['tanggal_transaksi'], row['total_harga'], row['username_login']))
         tree.pack(padx=20, pady=10)
         tk.Button(frame, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=22, command=self.create_main_menu).pack(pady=10)
-
-    def kasir_transaksi_screen(self):
-        self.clear_screen()
-        frame = tk.Frame(self.root, bg="#ffffff", bd=2, relief=tk.RIDGE)
-        frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER, width=420, height=480)
-        tk.Label(frame, text="Transaksi Kasir", font=("Segoe UI", 16, "bold"), bg="#ffffff").pack(pady=(18, 8))
-        ttk.Separator(frame, orient='horizontal').pack(fill='x', padx=20, pady=5)
-        produk_list = db.get_all_produk()
-        keranjang = []
-        produk_var = tk.StringVar()
-        jumlah_var = tk.IntVar()
-        produk_names = [f"{p['nama_produk']} (Stok: {p['stok']})" for p in produk_list]
-        tk.Label(frame, text="Pilih Produk", bg="#ffffff", font=('Segoe UI', 10, 'bold')).pack(anchor='w', padx=40, pady=(10,0))
-        produk_combo = ttk.Combobox(frame, textvariable=produk_var, values=produk_names, font=('Segoe UI', 11), width=24, state="readonly")
-        produk_combo.pack(padx=40, pady=(0,8))
-        tk.Label(frame, text="Jumlah", bg="#ffffff", font=('Segoe UI', 10, 'bold')).pack(anchor='w', padx=40, pady=(10,0))
-        jumlah_entry = tk.Entry(frame, textvariable=jumlah_var, font=('Segoe UI', 11), width=26, bg='#f9f9f9', relief=tk.GROOVE)
-        jumlah_entry.pack(padx=40, pady=(0,8))
-        def tambah_ke_keranjang():
-            idx = produk_combo.current()
-            if idx == -1:
-                messagebox.showerror("Error", "Pilih produk terlebih dahulu!")
-                return
-            jumlah = jumlah_var.get()
-            if jumlah <= 0:
-                messagebox.showerror("Error", "Jumlah harus lebih dari 0!")
-                return
-            produk = produk_list[idx]
-            if jumlah > produk['stok']:
-                messagebox.showerror("Error", "Stok tidak cukup!")
-                return
-            subtotal = produk['harga'] * jumlah
-            keranjang.append({
-                'id_produk': produk['id_produk'],
-                'nama_produk': produk['nama_produk'],
-                'harga': produk['harga'],
-                'jumlah': jumlah,
-                'subtotal': subtotal
-            })
-            update_keranjang_list()
-            jumlah_var.set(0)
-            produk_var.set("")
-        tk.Button(frame, text="Tambah ke Keranjang", font=('Segoe UI', 11), bg="#2196f3", fg="white", width=22, command=tambah_ke_keranjang).pack(pady=8)
-        keranjang_listbox = tk.Listbox(frame, font=('Segoe UI', 11), width=40, height=7)
-        keranjang_listbox.pack(padx=20, pady=8)
-        total_label = tk.Label(frame, text="Total: Rp0", font=('Segoe UI', 12, 'bold'), bg="#ffffff", fg="#4caf50")
-        total_label.pack(pady=(10,0))
-        def update_keranjang_list():
-            keranjang_listbox.delete(0, tk.END)
-            total = 0
-            for item in keranjang:
-                keranjang_listbox.insert(tk.END, f"{item['nama_produk']} x{item['jumlah']} = Rp{item['subtotal']}")
-                total += item['subtotal']
-            total_label.config(text=f"Total: Rp{total}")
-        def proses_transaksi():
-            if not keranjang:
-                messagebox.showerror("Error", "Keranjang kosong!")
-                return
-            total = sum(item['subtotal'] for item in keranjang)
-            # Update stok produk
-            for item in keranjang:
-                db.update_stok_produk(item['id_produk'], item['jumlah'])
-            # Simpan transaksi ke database
-            id_karyawan = 'K02' # hardcoded, sebaiknya ambil dari session login
-            db.save_transaksi(id_karyawan, keranjang, total)
-            show_struk(keranjang, total)
-        def show_struk(keranjang, total):
-            struk_win = tk.Toplevel(self.root)
-            struk_win.title("Struk Transaksi")
-            struk_win.geometry("340x400")
-            tk.Label(struk_win, text="Struk Transaksi", font=("Segoe UI", 16, "bold"), bg="#ffffff").pack(pady=(18, 8))
-            for item in keranjang:
-                tk.Label(struk_win, text=f"{item['nama_produk']} x{item['jumlah']} = Rp{item['subtotal']}", font=('Segoe UI', 11), bg="#ffffff").pack(anchor='w', padx=40)
-            tk.Label(struk_win, text=f"Total: Rp{total}", font=('Segoe UI', 12, 'bold'), fg="#4caf50", bg="#ffffff").pack(pady=18)
-            tk.Button(struk_win, text="Tutup", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=18, command=lambda: [struk_win.destroy(), self.create_main_menu()]).pack(pady=10)
-        tk.Button(frame, text="Proses Transaksi", font=('Segoe UI', 11), bg="#4caf50", fg="white", width=22, command=proses_transaksi).pack(pady=18)
-        tk.Button(frame, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=22, command=self.create_main_menu).pack(pady=5)
 
     def show_menu_list(self):
         self.clear_screen()
@@ -249,14 +254,23 @@ class AngkringanApp:
         frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER, width=340, height=340)
         tk.Label(frame, text="Daftar Menu", font=("Segoe UI", 16, "bold"), bg="#ffffff").pack(pady=(18, 8))
         ttk.Separator(frame, orient='horizontal').pack(fill='x', padx=20, pady=5)
-        listbox = tk.Listbox(frame, font=('Segoe UI', 11), width=32, height=8)
+
+        # Scrollbar for Listbox
+        list_frame = tk.Frame(frame)
+        list_frame.pack(pady=10)
+        scrollbar = tk.Scrollbar(list_frame, orient="vertical")
+        listbox = tk.Listbox(list_frame, font=('Segoe UI', 11), width=30, height=8, yscrollcommand=scrollbar.set)
+        scrollbar.config(command=listbox.yview)
+        scrollbar.pack(side="right", fill="y")
+        listbox.pack(side="left", fill="both")
+
         try:
             menus = db.get_all_produk()
             for menu in menus:
                 listbox.insert(tk.END, f"{menu['id_produk']}. {menu['nama_produk']} - Rp{menu['harga']} ({menu['stok']} stok)")
         except Exception as e:
             listbox.insert(tk.END, f"Error: {e}")
-        listbox.pack(pady=10)
+
         tk.Button(frame, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=18, command=self.create_main_menu).pack(pady=10)
 
     def add_menu_screen(self):
@@ -291,10 +305,7 @@ class AngkringanApp:
         ]:
             tk.Label(scroll_frame, text=label, bg="#ffffff", font=('Segoe UI', 10, 'bold')).pack(anchor='w', padx=40, pady=(10,0))
             tk.Entry(scroll_frame, textvariable=var, **entry_opts).pack(padx=40, pady=(0,8))
-        # Tambahan dummy field agar scrollbar aktif
-        for i in range(5):
-            tk.Label(scroll_frame, text=f"Field Dummy {i+1}", bg="#ffffff", font=('Segoe UI', 10, 'italic')).pack(anchor='w', padx=40, pady=(10,0))
-            tk.Entry(scroll_frame, font=('Segoe UI', 11), width=22, bg='#f0f0f0', relief=tk.GROOVE).pack(padx=40, pady=(0,8))
+
         def submit():
             try:
                 db.insert_produk(id_var.get(), nama_var.get(), kategori_var.get(), harga_var.get(), stok_var.get())
@@ -337,10 +348,7 @@ class AngkringanApp:
         ]:
             tk.Label(scroll_frame, text=label, bg="#ffffff", font=('Segoe UI', 10, 'bold')).pack(anchor='w', padx=40, pady=(10,0))
             tk.Entry(scroll_frame, textvariable=var, **entry_opts).pack(padx=40, pady=(0,8))
-        # Tambahan dummy field agar scrollbar aktif
-        for i in range(5):
-            tk.Label(scroll_frame, text=f"Field Dummy {i+1}", bg="#ffffff", font=('Segoe UI', 10, 'italic')).pack(anchor='w', padx=40, pady=(10,0))
-            tk.Entry(scroll_frame, font=('Segoe UI', 11), width=22, bg='#f0f0f0', relief=tk.GROOVE).pack(padx=40, pady=(0,8))
+
         def submit():
             try:
                 db.update_produk(id_var.get(), nama_var.get(), kategori_var.get(), harga_var.get(), stok_var.get())
@@ -361,8 +369,19 @@ class AngkringanApp:
         tk.Label(frame, text="ID Produk", bg="#ffffff").pack(anchor='w', padx=40)
         tk.Entry(frame, textvariable=id_var, font=('Segoe UI', 11), width=22).pack(padx=40)
         def submit():
+            prod_id = id_var.get()
+            if not prod_id:
+                messagebox.showerror("Error", "ID Produk tidak boleh kosong!")
+                return
+
+            # Validation: Check if product exists
+            existing = db.get_produk_by_id(prod_id)
+            if not existing:
+                messagebox.showerror("Error", "Produk tidak ada/tidak ditemukan!")
+                return
+
             try:
-                db.delete_produk(id_var.get())
+                db.delete_produk(prod_id)
                 messagebox.showinfo("Sukses", "Produk berhasil dihapus!")
                 self.create_main_menu()
             except Exception as e:
