@@ -19,14 +19,18 @@ class TestApp(unittest.TestCase):
 
     @patch('builtins.input', side_effect=['admin', 'admin'])
     def test_login_success(self, mock_input):
-        # Setup mock return for fetch_query inside auth.login
-        # It expects a list of dicts
-        self.mock_cursor.fetchall.return_value = [{
-            'id_karyawan': 'K01', 
-            'role_karyawan': 'admin', 
+        # The new auth.authenticate_user uses fetchone(), not fetchall()
+        self.mock_cursor.fetchone.return_value = {
+            'id_karyawan': 'K01',
+            'role_karyawan': 'admin',
             'username_login': 'admin',
             'password_login': 'admin'
-        }]
+        }
+
+        # We also need to configure the mock for the inner cursor used by authenticate_user
+        # The main mock_conn is passed to login(), which passes it to authenticate_user().
+        # So we configure the cursor on the mock connection itself.
+        self.mock_conn.cursor.return_value.fetchone.return_value = self.mock_cursor.fetchone.return_value
         
         role, uid, username = auth.login(self.mock_conn)
         
@@ -36,7 +40,9 @@ class TestApp(unittest.TestCase):
 
     @patch('builtins.input', side_effect=['wrong', 'pass'])
     def test_login_fail(self, mock_input):
-        self.mock_cursor.fetchall.return_value = []
+        # fetchone() returns None when no user is found
+        self.mock_cursor.fetchone.return_value = None
+        self.mock_conn.cursor.return_value.fetchone.return_value = None
         
         role, uid, username = auth.login(self.mock_conn)
         
