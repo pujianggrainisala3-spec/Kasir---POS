@@ -83,11 +83,3 @@ def save_transaksi(id_karyawan, keranjang, total_harga, jenis_transaksi="Cash"):
         raise e
     finally:
         conn.close()
-
-def get_laporan_penjualan():
-    conn = get_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT p.id_transaksi, p.tanggal_transaksi, p.total_harga, k.username_login FROM tb_pemesanan p JOIN tb_karyawan k ON p.id_karyawan = k.id_karyawan")
-    result = cursor.fetchall()
-    conn.close()
-    return result
