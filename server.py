@@ -72,15 +72,22 @@ def get_reports():
     reports = db.get_laporan_penjualan()
     return jsonify(reports)
 
+@app.route('/history/<string:id_karyawan>', methods=['GET'])
+def get_history(id_karyawan):
+    history = db.get_transaction_history_by_cashier(id_karyawan)
+    return jsonify(history)
+
 @app.route('/transactions', methods=['POST'])
 def process_transaction():
     data = request.get_json()
     id_karyawan = data.get('id_karyawan')
     keranjang = data.get('keranjang')
     total_harga = data.get('total_harga')
+    nomor_meja = data.get('nomor_meja')
+    nama_pelanggan = data.get('nama_pelanggan')
 
     try:
-        db.save_transaksi(id_karyawan, keranjang, total_harga)
+        db.save_transaksi(id_karyawan, keranjang, total_harga, nomor_meja, nama_pelanggan)
         for item in keranjang:
             db.update_stok_produk(item['id_produk'], item['jumlah'])
         return jsonify({'message': 'Transaksi berhasil'}), 200

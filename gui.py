@@ -62,31 +62,52 @@ class AngkringanApp:
     def create_main_menu(self):
         self.clear_screen()
         if self.role == "admin":
-            self.root.geometry("800x600")
-            notebook = ttk.Notebook(self.root)
-            notebook.pack(expand=True, fill="both")
-
-            dashboard_frame = ttk.Frame(notebook)
-            menu_frame = ttk.Frame(notebook)
-            employee_frame = ttk.Frame(notebook)
-            report_frame = ttk.Frame(notebook)
-
-            notebook.add(dashboard_frame, text="Dashboard")
-            notebook.add(menu_frame, text="Manajemen Menu")
-            notebook.add(employee_frame, text="Manajemen Karyawan")
-            notebook.add(report_frame, text="Laporan")
-
-            self.create_dashboard_tab(dashboard_frame)
-            self.create_menu_tab(menu_frame)
-            self.create_employee_tab(employee_frame)
-            self.create_report_tab(report_frame)
-
+            self.show_role_selection()
         elif self.role == "kasir":
             self.kasir_transaksi_screen()
 
-        # Add a logout button
-        logout_button = tk.Button(self.root, text="Keluar", font=('Segoe UI', 11), bg="#607d8b", fg="white", command=self.create_login_screen)
-        logout_button.pack(pady=10)
+    def show_role_selection(self):
+        self.clear_screen()
+        self.root.geometry("400x300")
+
+        frame = tk.Frame(self.root, bg="#ffffff")
+        frame.pack(expand=True)
+
+        tk.Label(frame, text="Pilih Tampilan", font=("Segoe UI", 16, "bold"), bg="#ffffff").pack(pady=20)
+
+        tk.Button(frame, text="Dasbor Admin", font=('Segoe UI', 12), command=self.admin_dashboard_screen).pack(pady=10)
+        tk.Button(frame, text="Antarmuka Kasir", font=('Segoe UI', 12), command=self.kasir_transaksi_screen).pack(pady=10)
+
+        tk.Button(frame, text="Logout", font=('Segoe UI', 10), bg="#607d8b", fg="white", command=self.create_login_screen).pack(pady=20)
+
+    def admin_dashboard_screen(self):
+        self.clear_screen()
+        self.root.geometry("800x600")
+        notebook = ttk.Notebook(self.root)
+        notebook.pack(expand=True, fill="both")
+
+        dashboard_frame = ttk.Frame(notebook)
+        menu_frame = ttk.Frame(notebook)
+        employee_frame = ttk.Frame(notebook)
+        report_frame = ttk.Frame(notebook)
+
+        notebook.add(dashboard_frame, text="Dashboard")
+        notebook.add(menu_frame, text="Manajemen Menu")
+        notebook.add(employee_frame, text="Manajemen Karyawan")
+        notebook.add(report_frame, text="Laporan")
+
+        self.create_dashboard_tab(dashboard_frame)
+        self.create_menu_tab(menu_frame)
+        self.create_employee_tab(employee_frame)
+        self.create_report_tab(report_frame)
+
+        # Navigation buttons for admin
+        nav_frame = tk.Frame(self.root)
+        nav_frame.pack(side="bottom", fill="x", pady=10)
+
+        tk.Button(nav_frame, text="Kembali ke Pemilihan", font=('Segoe UI', 11), command=self.show_role_selection).pack(side="left", padx=10)
+        tk.Button(nav_frame, text="Logout", font=('Segoe UI', 11), bg="#607d8b", fg="white", command=self.create_login_screen).pack(side="left", padx=10)
+        tk.Button(nav_frame, text="Tutup Aplikasi", font=('Segoe UI', 11), bg="#f44336", fg="white", command=self.root.quit).pack(side="right", padx=10)
 
     def create_dashboard_tab(self, parent):
         for widget in parent.winfo_children():
@@ -220,6 +241,18 @@ class AngkringanApp:
         cart_tree.heading("harga", text="Harga")
         cart_tree.pack(fill="both", expand=True, padx=5, pady=5)
 
+        # Customer info inputs
+        customer_frame = tk.Frame(cart_panel, bg="#ffffff")
+        customer_frame.pack(fill="x", pady=5)
+
+        tk.Label(customer_frame, text="No. Meja:", font=('Segoe UI', 10), bg="#ffffff").grid(row=0, column=0, padx=5, pady=2, sticky="w")
+        nomor_meja_var = tk.StringVar()
+        tk.Entry(customer_frame, textvariable=nomor_meja_var, font=('Segoe UI', 10)).grid(row=0, column=1, padx=5, pady=2, sticky="ew")
+
+        tk.Label(customer_frame, text="Pelanggan:", font=('Segoe UI', 10), bg="#ffffff").grid(row=1, column=0, padx=5, pady=2, sticky="w")
+        nama_pelanggan_var = tk.StringVar()
+        tk.Entry(customer_frame, textvariable=nama_pelanggan_var, font=('Segoe UI', 10)).grid(row=1, column=1, padx=5, pady=2, sticky="ew")
+
         button_frame_cart = tk.Frame(cart_panel, bg="#ffffff")
         button_frame_cart.pack(fill="x", pady=5)
 
@@ -229,7 +262,22 @@ class AngkringanApp:
         total_label = tk.Label(cart_panel, text="Total: Rp 0", font=("Segoe UI", 14, "bold"), bg="#ffffff")
         total_label.pack(pady=10)
 
-        tk.Button(cart_panel, text="Bayar", font=('Segoe UI', 12, 'bold'), bg="#4caf50", fg="white", height=2, command=lambda: self.proses_pembayaran(total_label)).pack(fill="x", padx=5, pady=10)
+        tk.Button(cart_panel, text="Bayar", font=('Segoe UI', 12, 'bold'), bg="#4caf50", fg="white", height=2, command=lambda: self.proses_pembayaran(total_label, nomor_meja_var.get(), nama_pelanggan_var.get())).pack(fill="x", padx=5, pady=10)
+
+        # Action buttons
+        action_frame_kasir = tk.Frame(cart_panel, bg="#ffffff")
+        action_frame_kasir.pack(fill="x", pady=5, side="bottom")
+        tk.Button(action_frame_kasir, text="Riwayat Transaksi", font=('Segoe UI', 10), command=self.show_history_popup).pack(fill="x", expand=True)
+
+        # Navigation buttons for cashier
+        nav_frame_kasir = tk.Frame(cart_panel, bg="#ffffff")
+        nav_frame_kasir.pack(fill="x", pady=10, side="bottom")
+
+        if self.role == "admin":
+            tk.Button(nav_frame_kasir, text="Kembali", font=('Segoe UI', 10), command=self.show_role_selection).pack(side="left", padx=5, expand=True)
+
+        tk.Button(nav_frame_kasir, text="Logout", font=('Segoe UI', 10), bg="#607d8b", fg="white", command=self.create_login_screen).pack(side="left", padx=5, expand=True)
+        tk.Button(nav_frame_kasir, text="Tutup Aplikasi", font=('Segoe UI', 10), bg="#f44336", fg="white", command=self.root.quit).pack(side="right", padx=5, expand=True)
 
         response = requests.get(f"{API_URL}/products")
         if response.status_code == 200:
@@ -307,7 +355,7 @@ class AngkringanApp:
         self.keranjang.clear()
         self.update_keranjang_list(cart_tree, total_label)
 
-    def proses_pembayaran(self, total_label):
+    def proses_pembayaran(self, total_label, nomor_meja, nama_pelanggan):
         if not self.keranjang:
             messagebox.showerror("Error", "Keranjang kosong!")
             return
@@ -324,17 +372,57 @@ class AngkringanApp:
             data = {
                 "id_karyawan": self.id_karyawan,
                 "keranjang": self.keranjang,
-                "total_harga": total_harga
+                "total_harga": total_harga,
+                "nomor_meja": nomor_meja,
+                "nama_pelanggan": nama_pelanggan
             }
             response = requests.post(f"{API_URL}/transactions", json=data)
             if response.status_code == 200:
                 messagebox.showinfo("Sukses", "Transaksi berhasil disimpan.")
+                self.show_struk(self.keranjang, total_harga, nomor_meja, nama_pelanggan)
                 popup.destroy()
                 self.kasir_transaksi_screen()
             else:
                 messagebox.showerror("Error", "Gagal menyimpan transaksi.")
 
         tk.Button(popup, text="Konfirmasi Bayar", command=on_payment_complete).pack(pady=10)
+
+    def show_struk(self, keranjang, total, nomor_meja, nama_pelanggan):
+        struk_win = tk.Toplevel(self.root)
+        struk_win.title("Struk Transaksi")
+        struk_win.geometry("350x450")
+
+        tk.Label(struk_win, text="--- Struk Transaksi ---", font=("Courier", 14, "bold")).pack(pady=10)
+        tk.Label(struk_win, text=f"No. Meja: {nomor_meja}", font=("Courier", 12)).pack(anchor='w', padx=20)
+        tk.Label(struk_win, text=f"Pelanggan: {nama_pelanggan}", font=("Courier", 12)).pack(anchor='w', padx=20)
+
+        for item in keranjang:
+            tk.Label(struk_win, text=f"{item['nama_produk']} x{item['jumlah']} = Rp{item['harga'] * item['jumlah']}", font=("Courier", 12)).pack(anchor='w', padx=20)
+
+        tk.Label(struk_win, text="-"*30, font=("Courier", 12)).pack(pady=10)
+        tk.Label(struk_win, text=f"Total: Rp{total}", font=("Courier", 14, "bold")).pack(pady=10)
+
+        tk.Button(struk_win, text="Tutup", command=struk_win.destroy).pack(pady=10)
+
+    def show_history_popup(self):
+        popup = tk.Toplevel(self.root)
+        popup.title("Riwayat Transaksi")
+        popup.geometry("600x400")
+
+        tk.Label(popup, text="Riwayat Transaksi Anda", font=("Segoe UI", 16, "bold")).pack(pady=10)
+
+        tree = ttk.Treeview(popup, columns=("tanggal", "total", "meja", "pelanggan"), show="headings")
+        tree.heading("tanggal", text="Tanggal")
+        tree.heading("total", text="Total")
+        tree.heading("meja", text="No. Meja")
+        tree.heading("pelanggan", text="Pelanggan")
+        tree.pack(fill="both", expand=True, padx=10, pady=10)
+
+        response = requests.get(f"{API_URL}/history/{self.id_karyawan}")
+        if response.status_code == 200:
+            history = response.json()
+            for item in history:
+                tree.insert("", "end", values=(item['tanggal_transaksi'], f"Rp {item['total_harga']}", item['nomor_meja'], item['nama_pelanggan']))
 
     def laporan_penjualan_screen(self, parent_frame=None):
         if parent_frame is None:
