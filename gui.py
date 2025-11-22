@@ -155,6 +155,7 @@ class AngkringanApp:
                 ("Tambah Menu", self.add_menu_screen, "#4caf50"),
                 ("Update Menu", self.update_menu_screen, "#ff9800"),
                 ("Hapus Menu", self.delete_menu_screen, "#f44336"),
+                ("Keluar", self.logout_action, "#607d8b"),
             ]
             for text, cmd, color in buttons:
                 tk.Button(menu_frame, text=text, font=('Segoe UI', 12), bg=color, fg="white", width=30, command=cmd).pack(pady=8)
@@ -249,6 +250,17 @@ class AngkringanApp:
         # Add Button (Below inputs on Left Panel)
         tk.Button(left_panel, text="Tambah ke Keranjang", bg="#2196f3", fg="white", font=('Segoe UI', 11), command=tambah_ke_keranjang).pack(fill="x", pady=10)
 
+        def hapus_dari_keranjang():
+            selected = keranjang_listbox.curselection()
+            if not selected:
+                messagebox.showerror("Error", "Pilih item yang akan dihapus!")
+                return
+            idx = selected[0]
+            del keranjang[idx]
+            update_keranjang_list()
+
+        tk.Button(right_panel, text="Hapus Item dari Keranjang", bg="#f44336", fg="white", font=('Segoe UI', 11), command=hapus_dari_keranjang).pack(fill="x", padx=5, pady=5)
+
         # --- Payment Logic ---
         def open_payment_popup():
             if not keranjang:
@@ -321,7 +333,7 @@ class AngkringanApp:
                 f.write("      Terima Kasih Kunjungannya     \n")
                 f.write("====================================\n")
         except Exception as e:
-            print(f"Failed to save receipt: {e}")
+            messagebox.showwarning("Warning", f"Gagal menyimpan struk: {e}")
 
     def show_menu_list(self):
         header, content, footer = self.create_base_layout("Daftar Menu")
