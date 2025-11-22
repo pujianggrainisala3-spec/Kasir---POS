@@ -1,267 +1,202 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
 import db_utils as db
-import auth
+import datetime
+import os
+
 
 class AngkringanApp:
     def __init__(self, root):
         self.root = root
         self.root.title("Angkringan POS")
-        self.root.geometry("420x480")
-        self.root.configure(bg="#f0f0f0") # Light grey background
-
+        self.root.geometry("800x600")
+        self.root.configure(bg="#f5f5f5")
         self.username_var = tk.StringVar()
         self.password_var = tk.StringVar()
         self.role = None
-        self.id_karyawan = None # Store the logged-in user's ID
 
-        # --- Professional UI Style ---
-        self.style = ttk.Style(self.root)
+        # Styles
+        self.style = ttk.Style()
         self.style.theme_use('clam')
+        self.style.configure('TButton', font=('Segoe UI', 11), padding=6)
+        self.style.configure('TLabel', font=('Segoe UI', 11), background="#ffffff")
 
-        # Colors
-        PRIMARY_COLOR = "#2c3e50" # Dark Blue
-        SECONDARY_COLOR = "#ecf0f1" # Light Grey
-        ACCENT_COLOR = "#3498db" # Bright Blue
-        SUCCESS_COLOR = "#2ecc71" # Green
-        ERROR_COLOR = "#e74c3c" # Red
-        BUTTON_TEXT_COLOR = "#ffffff"
+        # Main Menu Bar (File -> Logout)
+        self.menubar = tk.Menu(self.root)
+        self.root.config(menu=self.menubar)
+        self.file_menu = tk.Menu(self.menubar, tearoff=0)
+        self.menubar.add_cascade(label="File", menu=self.file_menu)
+        self.file_menu.add_command(label="Logout", command=self.logout_action)
+        self.file_menu.add_separator()
+        self.file_menu.add_command(label="Exit", command=self.root.quit)
 
-        self.style.configure('TFrame', background=SECONDARY_COLOR)
-        self.style.configure(
-            'TLabel',
-            font=('Helvetica', 11),
-            background=SECONDARY_COLOR,
-            foreground=PRIMARY_COLOR
-        )
-        self.style.configure(
-            'Title.TLabel',
-            font=('Helvetica', 22, 'bold'),
-            foreground=PRIMARY_COLOR
-        )
-        self.style.configure(
-            'Header.TLabel',
-            font=('Helvetica', 16, 'bold'),
-            foreground=PRIMARY_COLOR
-        )
-        self.style.configure(
-            'TEntry',
-            font=('Helvetica', 11),
-            padding=8,
-            fieldbackground="#ffffff"
-        )
-        self.style.configure(
-            'TButton',
-            font=('Helvetica', 11, 'bold'),
-            padding=10,
-            borderwidth=0
-        )
-        self.style.map('TButton',
-            background=[('active', ACCENT_COLOR)],
-            foreground=[('active', BUTTON_TEXT_COLOR)]
-        )
-        self.style.configure(
-            'Login.TButton',
-            background=SUCCESS_COLOR,
-            foreground=BUTTON_TEXT_COLOR,
-        )
-        self.style.map('Login.TButton',
-            background=[('active', '#27ae60')] # Darker green on hover
-        )
+        # Disable logout initially
+        self.file_menu.entryconfig("Logout", state="disabled")
+
+        # Status Bar
+        self.status_var = tk.StringVar()
+        self.status_var.set("System Ready")
+        self.statusbar = tk.Label(self.root, textvariable=self.status_var, bd=1, relief=tk.SUNKEN, anchor=tk.W, font=('Segoe UI', 9))
+        self.statusbar.pack(side=tk.BOTTOM, fill=tk.X)
 
         self.create_login_screen()
 
     def clear_screen(self):
+        # Destroy all widgets except statusbar
         for widget in self.root.winfo_children():
-            widget.destroy()
+            if widget != self.statusbar and widget != self.menubar:
+                widget.destroy()
+
+    def logout_action(self):
+        if messagebox.askyesno("Logout", "Are you sure you want to logout?"):
+            self.create_login_screen()
+
+    def create_base_layout(self, title):
+        """
+        Creates a standard 3-row layout: Header, Content (Scrollable), Footer (Buttons)
+        Returns: (header_frame, content_frame, footer_frame)
+        """
+        self.clear_screen()
+
+        # Main Container
+        main_container = tk.Frame(self.root, bg="#f5f5f5")
+        main_container.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # 1. Header Frame
+        header_frame = tk.Frame(main_container, bg="#ffffff", bd=1, relief=tk.RIDGE)
+        header_frame.pack(side="top", fill="x", pady=(0, 10))
+        tk.Label(header_frame, text=title, font=("Segoe UI", 18, "bold"), bg="#ffffff", pady=10).pack()
+
+        # 2. Footer Frame (Packed BOTTOM so it stays fixed)
+        footer_frame = tk.Frame(main_container, bg="#f5f5f5")
+        footer_frame.pack(side="bottom", fill="x", pady=(10, 0))
+
+        # 3. Content Frame (Middle, Expandable)
+        content_outer = tk.Frame(main_container, bg="#ffffff", bd=1, relief=tk.RIDGE)
+        content_outer.pack(side="top", fill="both", expand=True)
+
+        canvas = tk.Canvas(content_outer, bg="#ffffff", highlightthickness=0)
+        scrollbar = tk.Scrollbar(content_outer, orient="vertical", command=canvas.yview)
+        content_frame = tk.Frame(canvas, bg="#ffffff")
+
+        content_frame.bind(
+            "<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+
+        canvas.create_window((0, 0), window=content_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        # Update status
+        role_str = self.role.capitalize() if self.role else "Guest"
+        self.status_var.set(f"Logged in as: {role_str}")
+
+        return header_frame, content_frame, footer_frame
 
     def create_login_screen(self):
         self.clear_screen()
         self.role = None
-        self.id_karyawan = None
+        self.username_var.set("")
+        self.password_var.set("")
+        self.file_menu.entryconfig("Logout", state="disabled")
+        self.status_var.set("Waiting for Login...")
 
-        container = ttk.Frame(self.root, padding=20)
-        container.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        frame = tk.Frame(self.root, bg="#ffffff", bd=2, relief=tk.RIDGE)
+        frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER, width=360, height=340)
 
-        frame = ttk.Frame(container, padding=30)
-        frame.grid(row=0, column=0, sticky="nsew")
+        tk.Label(frame, text="Angkringan POS", font=("Segoe UI", 22, "bold"), bg="#ffffff").pack(pady=(25, 10))
+        ttk.Separator(frame, orient='horizontal').pack(fill='x', padx=30, pady=5)
 
-        ttk.Label(frame, text="Angkringan POS", style='Title.TLabel').grid(row=0, column=0, columnspan=2, pady=(0, 20))
-        ttk.Separator(frame, orient='horizontal').grid(row=1, column=0, columnspan=2, sticky='ew', pady=(0, 15))
+        tk.Label(frame, text="Login System", font=("Segoe UI", 14), bg="#ffffff").pack(pady=(5, 15))
 
-        ttk.Label(frame, text="Username").grid(row=2, column=0, columnspan=2, sticky='w', pady=(5, 2))
-        username_entry = ttk.Entry(frame, textvariable=self.username_var, width=30)
-        username_entry.grid(row=3, column=0, columnspan=2, pady=(0, 10))
-        username_entry.focus() # Set focus to username field
+        tk.Label(frame, text="Username", bg="#ffffff", font=('Segoe UI', 10)).pack(anchor='w', padx=40)
+        tk.Entry(frame, textvariable=self.username_var, font=('Segoe UI', 11), width=25).pack(padx=40, pady=(0, 10))
 
-        ttk.Label(frame, text="Password").grid(row=4, column=0, columnspan=2, sticky='w', pady=(5, 2))
-        password_entry = ttk.Entry(frame, textvariable=self.password_var, show="*", width=30)
-        password_entry.grid(row=5, column=0, columnspan=2, pady=(0, 20))
+        tk.Label(frame, text="Password", bg="#ffffff", font=('Segoe UI', 10)).pack(anchor='w', padx=40)
+        tk.Entry(frame, textvariable=self.password_var, show="*", font=('Segoe UI', 11), width=25).pack(padx=40, pady=(0, 20))
 
-        login_button = ttk.Button(frame, text="Login", command=self.login, style='Login.TButton', width=28)
-        login_button.grid(row=6, column=0, columnspan=2)
-
-        # Bind the <Return> key (Enter) to the login function
-        self.root.bind('<Return>', lambda event: self.login())
+        tk.Button(frame, text="Login", font=('Segoe UI', 11, 'bold'), bg="#4caf50", fg="white", width=25, command=self.login).pack(pady=10)
 
     def login(self):
         username = self.username_var.get()
         password = self.password_var.get()
-
-        if not username or not password:
-            messagebox.showwarning("Input Error", "Username dan password tidak boleh kosong!")
-            return
-
-        user = auth.authenticate_user(username, password)
-
-        if user:
-            self.role = user['role_karyawan']
-            self.id_karyawan = user['id_karyawan'] # Save the user ID
-            messagebox.showinfo("Login Berhasil", f"Selamat datang, {username}!")
-            self.create_main_menu()
-        else:
-            messagebox.showerror("Login Gagal", "Username atau password salah!")
-            self.password_var.set("") # Clear password field on failure
-
-        # --- Additional Button Styles ---
-        self.style.configure(
-            'Nav.TButton',
-            background=ACCENT_COLOR,
-            foreground=BUTTON_TEXT_COLOR,
-        )
-        self.style.map('Nav.TButton', background=[('active', '#2980b9')])
-
-        self.style.configure(
-            'Danger.TButton',
-            background=ERROR_COLOR,
-            foreground=BUTTON_TEXT_COLOR
-        )
-        self.style.map('Danger.TButton', background=[('active', '#c0392b')])
-
-        self.style.configure(
-            'Warning.TButton',
-            background="#f39c12", # Orange
-            foreground=BUTTON_TEXT_COLOR
-        )
-        self.style.map('Warning.TButton', background=[('active', '#d35400')])
-
-        self.style.configure(
-            'Secondary.TButton',
-            background="#7f8c8d", # Grey
-            foreground=BUTTON_TEXT_COLOR
-        )
-        self.style.map('Secondary.TButton', background=[('active', '#2c3e50')])
+        # login admin/kasir
+        import mysql.connector
+        try:
+            conn = mysql.connector.connect(host='localhost', database='db_angkringan', user='root', password='')
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM tb_karyawan WHERE username_login = %s AND password_login = %s", (username, password))
+            result = cursor.fetchone()
+            conn.close()
+            user = result
+            if user:
+                self.role = user['role_karyawan']
+                self.file_menu.entryconfig("Logout", state="normal")
+                messagebox.showinfo("Login", f"Selamat datang, {username}")
+                self.create_main_menu()
+            else:
+                messagebox.showerror("Login Gagal", "Username atau password salah!")
+        except Exception as e:
+            messagebox.showerror("Connection Error", f"Database error: {e}")
 
     def create_main_menu(self):
-        self.clear_screen()
-        container = ttk.Frame(self.root, padding=20)
-        container.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        header, content, footer = self.create_base_layout(f"Main Menu - {self.role.capitalize()}")
 
-        frame = ttk.Frame(container, padding=20)
-        frame.grid(row=0, column=0)
+        # Center content for menu buttons
+        menu_frame = tk.Frame(content, bg="#ffffff")
+        menu_frame.pack(pady=50, padx=50)
 
-        ttk.Label(frame, text=f"Menu {self.role.capitalize()}", style='Header.TLabel').grid(row=0, column=0, pady=(0, 15))
-        ttk.Separator(frame, orient='horizontal').grid(row=1, column=0, sticky='ew', pady=(0, 15))
-
-        buttons = []
         if self.role == "admin":
             buttons = [
-                ("🧾 Lihat Menu", self.show_menu_list, 'Nav.TButton'),
-                ("➕ Tambah Menu", self.add_menu_screen, 'Login.TButton'),
-                ("🔄 Update Menu", self.update_menu_screen, 'Warning.TButton'),
-                ("🗑️ Hapus Menu", self.delete_menu_screen, 'Danger.TButton'),
-                ("📊 Laporan Penjualan", self.laporan_penjualan_screen, 'Nav.TButton'),
+                ("Lihat Daftar Menu", self.show_menu_list, "#2196f3"),
+                ("Tambah Menu", self.add_menu_screen, "#4caf50"),
+                ("Update Menu", self.update_menu_screen, "#ff9800"),
+                ("Hapus Menu", self.delete_menu_screen, "#f44336"),
             ]
+            for text, cmd, color in buttons:
+                tk.Button(menu_frame, text=text, font=('Segoe UI', 12), bg=color, fg="white", width=30, command=cmd).pack(pady=8)
+
         elif self.role == "kasir":
-            buttons = [
-                ("🛒 Buat Transaksi", self.kasir_transaksi_screen, 'Login.TButton'),
-            ]
+            tk.Button(menu_frame, text="Transaksi Baru", font=('Segoe UI', 12), bg="#4caf50", fg="white", width=30, command=self.kasir_transaksi_screen).pack(pady=8)
 
-        for i, (text, command, style) in enumerate(buttons):
-            ttk.Button(frame, text=text, command=command, style=style, width=25).grid(row=i+2, column=0, pady=5)
-
-        ttk.Button(frame, text="Logout", command=self.create_login_screen, style='Secondary.TButton', width=25).grid(row=len(buttons)+2, column=0, pady=(15, 0))
+        # Footer Logout Button (Redundant but requested for accessibility)
+        tk.Button(footer, text="Logout", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=20, command=self.logout_action).pack(side="right", padx=20, pady=10)
 
     def kasir_transaksi_screen(self):
-        self.clear_screen()
+        header, content, footer = self.create_base_layout("Transaksi Kasir")
 
-        # Main container
-        container = ttk.Frame(self.root, padding=15)
-        container.pack(expand=True, fill='both')
-        container.columnconfigure(1, weight=1) # Make cart resizable
-
-        # --- Product Entry ---
-        entry_frame = ttk.Frame(container, padding=15)
-        entry_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 10))
-
-        ttk.Label(entry_frame, text="Transaksi Kasir", style='Header.TLabel').grid(row=0, column=0, columnspan=2, pady=(0, 15))
+        # --- Left Side: Product Selection ---
+        left_panel = tk.Frame(content, bg="#ffffff")
+        left_panel.pack(side="left", fill="both", expand=True, padx=20, pady=20)
 
         produk_list = db.get_all_produk()
-        keranjang = []
-        produk_var = tk.StringVar()
-        jumlah_var = tk.IntVar(value=1)
         produk_names = [f"{p['nama_produk']} (Stok: {p['stok']})" for p in produk_list]
+        produk_var = tk.StringVar()
+        jumlah_var = tk.IntVar()
 
-        ttk.Label(entry_frame, text="Pilih Produk:").grid(row=1, column=0, columnspan=2, sticky='w', pady=(5, 2))
-        produk_combo = ttk.Combobox(entry_frame, textvariable=produk_var, values=produk_names, state="readonly", width=30)
-        produk_combo.grid(row=2, column=0, columnspan=2, sticky='ew', pady=(0, 10))
+        tk.Label(left_panel, text="Pilih Produk:", font=('Segoe UI', 11, 'bold'), bg="#ffffff").pack(anchor="w")
+        produk_combo = ttk.Combobox(left_panel, textvariable=produk_var, values=produk_names, font=('Segoe UI', 11), state="readonly")
+        produk_combo.pack(fill="x", pady=(5, 15))
 
-        ttk.Label(entry_frame, text="Jumlah:").grid(row=3, column=0, sticky='w', pady=(5, 2))
-        jumlah_entry = ttk.Entry(entry_frame, textvariable=jumlah_var, width=10)
-        jumlah_entry.grid(row=4, column=0, sticky='w', pady=(0, 15))
+        tk.Label(left_panel, text="Jumlah:", font=('Segoe UI', 11, 'bold'), bg="#ffffff").pack(anchor="w")
+        jumlah_entry = tk.Entry(left_panel, textvariable=jumlah_var, font=('Segoe UI', 11))
+        jumlah_entry.pack(fill="x", pady=(5, 15))
 
-        def tambah_ke_keranjang():
-            idx = produk_combo.current()
-            if idx == -1:
-                messagebox.showerror("Error", "Pilih produk terlebih dahulu!")
-                return
+        # --- Right Side: Cart List ---
+        right_panel = tk.Frame(content, bg="#ffffff", bd=1, relief=tk.SUNKEN)
+        right_panel.pack(side="right", fill="both", expand=True, padx=20, pady=20)
 
-            try:
-                jumlah = jumlah_var.get()
-                if jumlah <= 0:
-                    messagebox.showerror("Error", "Jumlah harus lebih dari 0!")
-                    return
-            except (tk.TclError, ValueError):
-                messagebox.showerror("Error", "Jumlah harus berupa angka!")
-                return
+        tk.Label(right_panel, text="Keranjang Belanja", font=('Segoe UI', 11, 'bold'), bg="#eeeeee").pack(fill="x", ipady=5)
 
-            produk = produk_list[idx]
-            if jumlah > produk['stok']:
-                messagebox.showerror("Error", "Stok tidak cukup!")
-                return
+        keranjang_listbox = tk.Listbox(right_panel, font=('Segoe UI', 11), height=15)
+        keranjang_listbox.pack(fill="both", expand=True, padx=5, pady=5)
 
-            subtotal = produk['harga'] * jumlah
-            keranjang.append({
-                'id_produk': produk['id_produk'],
-                'nama_produk': produk['nama_produk'],
-                'harga': produk['harga'],
-                'jumlah': jumlah,
-                'subtotal': subtotal
-            })
-            update_keranjang_list()
-            jumlah_var.set(1)
-            produk_var.set("")
-            produk_combo.selection_clear()
+        total_label = tk.Label(right_panel, text="Total: Rp0", font=('Segoe UI', 14, 'bold'), bg="#ffffff", fg="#4caf50")
+        total_label.pack(pady=10)
 
-        ttk.Button(entry_frame, text="➕ Tambah", command=tambah_ke_keranjang, style='Nav.TButton').grid(row=4, column=1, sticky='e', pady=(0, 15))
-
-        # --- Cart Display ---
-        cart_frame = ttk.Frame(container, padding=15)
-        cart_frame.grid(row=0, column=1, sticky='nsew')
-        cart_frame.rowconfigure(1, weight=1) # Make treeview resizable
-
-        ttk.Label(cart_frame, text="Keranjang", style='Header.TLabel').grid(row=0, column=0, pady=(0, 15))
-
-        cols = ("Nama Produk", "Jumlah", "Subtotal")
-        keranjang_tree = ttk.Treeview(cart_frame, columns=cols, show="headings", height=15)
-        for col in cols:
-            keranjang_tree.heading(col, text=col)
-        keranjang_tree.column("Jumlah", width=60, anchor='center')
-        keranjang_tree.column("Subtotal", width=100, anchor='e')
-        keranjang_tree.grid(row=1, column=0, sticky='nsew')
-
-        total_label = ttk.Label(cart_frame, text="Total: Rp 0", font=('Helvetica', 14, 'bold'))
-        total_label.grid(row=2, column=0, sticky='e', pady=(10, 0))
+        keranjang = []
 
         def update_keranjang_list():
             for i in keranjang_tree.get_children():
@@ -271,122 +206,129 @@ class AngkringanApp:
             for item in keranjang:
                 keranjang_tree.insert("", tk.END, values=(item['nama_produk'], item['jumlah'], f"Rp {item['subtotal']:,-}"))
                 total += item['subtotal']
+            total_label.config(text=f"Total: Rp{total}")
+            return total
 
-            total_label.config(text=f"Total: Rp {total:,-}")
+        def tambah_ke_keranjang():
+            idx = produk_combo.current()
+            if idx == -1:
+                messagebox.showerror("Error", "Pilih produk terlebih dahulu!")
+                return
+            jumlah = jumlah_var.get()
+            if jumlah <= 0:
+                messagebox.showerror("Error", "Jumlah harus lebih dari 0!")
+                return
+            produk = produk_list[idx]
 
-        # --- Action Buttons ---
-        action_frame = ttk.Frame(container)
-        action_frame.grid(row=1, column=0, columnspan=2, sticky='ew', pady=(10, 0))
+            current_in_cart = sum(item['jumlah'] for item in keranjang if item['id_produk'] == produk['id_produk'])
+            if (current_in_cart + jumlah) > produk['stok']:
+                messagebox.showerror("Error", f"Stok tidak cukup! Sisa: {produk['stok'] - current_in_cart}")
+                return
 
-        def _open_payment_dialog():
-            """
-            Handles the entire payment process.
-            This function is triggered when the "Proses Transaksi" button is clicked.
-            It opens a modal dialog for the cashier to enter the amount paid by the customer.
-            It calculates the change, saves the transaction to the database, updates stock,
-            and displays a success message before resetting the screen.
-            """
+            subtotal = produk['harga'] * jumlah
+
+            found = False
+            for item in keranjang:
+                if item['id_produk'] == produk['id_produk']:
+                    item['jumlah'] += jumlah
+                    item['subtotal'] += subtotal
+                    found = True
+                    break
+            if not found:
+                keranjang.append({
+                    'id_produk': produk['id_produk'],
+                    'nama_produk': produk['nama_produk'],
+                    'harga': produk['harga'],
+                    'jumlah': jumlah,
+                    'subtotal': subtotal
+                })
+
+            update_keranjang_list()
+            jumlah_var.set(0)
+            produk_var.set("")
+
+        # Add Button (Below inputs on Left Panel)
+        tk.Button(left_panel, text="Tambah ke Keranjang", bg="#2196f3", fg="white", font=('Segoe UI', 11), command=tambah_ke_keranjang).pack(fill="x", pady=10)
+
+        # --- Payment Logic ---
+        def open_payment_popup():
             if not keranjang:
                 messagebox.showerror("Error", "Keranjang kosong!")
                 return
 
-            total_belanja = sum(item['subtotal'] for item in keranjang)
+            total = sum(item['subtotal'] for item in keranjang)
 
             payment_win = tk.Toplevel(self.root)
             payment_win.title("Pembayaran")
-            payment_win.geometry("350x250")
-            payment_win.transient(self.root) # Keep window on top
-            payment_win.grab_set() # Modal behavior
-            payment_win.resizable(False, False)
+            payment_win.geometry("400x450")
 
-            frame = ttk.Frame(payment_win, padding=20)
-            frame.pack(expand=True, fill='both')
+            tk.Label(payment_win, text="Pembayaran", font=("Segoe UI", 18, "bold")).pack(pady=(20, 10))
+            tk.Label(payment_win, text=f"Total Tagihan: Rp{total}", font=("Segoe UI", 14, "bold"), fg="#ff5722").pack(pady=10)
 
-            ttk.Label(frame, text="Total Belanja:", style='Header.TLabel').pack(pady=(0, 5))
-            ttk.Label(frame, text=f"Rp {total_belanja:,.2f}", font=('Helvetica', 18, 'bold')).pack(pady=(0, 20))
+            tk.Label(payment_win, text="Nominal Bayar (Rp):", font=("Segoe UI", 11)).pack(pady=(10,0))
+            nominal_var = tk.IntVar()
+            nominal_entry = tk.Entry(payment_win, textvariable=nominal_var, font=('Segoe UI', 14), justify='center')
+            nominal_entry.pack(pady=5)
+            nominal_entry.focus_set()
 
-            ttk.Label(frame, text="Jumlah Bayar (Rp):").pack(pady=(0, 5))
-            payment_var = tk.StringVar()
-            payment_entry = ttk.Entry(frame, textvariable=payment_var, font=('Helvetica', 12), justify='center', width=20)
-            payment_entry.pack(pady=(0, 20))
-            payment_entry.focus()
-
-            def _process_payment():
+            def process_payment():
                 try:
-                    paid_amount = float(payment_var.get())
-                except ValueError:
-                    messagebox.showerror("Input Salah", "Jumlah bayar harus berupa angka.", parent=payment_win)
+                    nominal = nominal_var.get()
+                except:
+                    messagebox.showerror("Error", "Input tidak valid!", parent=payment_win)
                     return
 
-                if paid_amount < total_belanja:
-                    messagebox.showwarning("Pembayaran Kurang", "Jumlah bayar tidak mencukupi.", parent=payment_win)
-                    return
+                if nominal < total:
+                    messagebox.showerror("Pembayaran Gagal", f"Uang Kurang Rp{total - nominal}", parent=payment_win)
+                else:
+                    kembalian = nominal - total
+                    try:
+                        id_karyawan = 'K02'
+                        id_transaksi = db.save_transaksi(id_karyawan, keranjang, total)
+                        self.save_receipt_to_file(keranjang, total, nominal, kembalian, id_transaksi)
 
-                kembalian = paid_amount - total_belanja
+                        msg = f"Pembayaran Sukses!\nKembalian: Rp{kembalian}" if kembalian > 0 else "Pembayaran Sukses! Uang Pas."
+                        messagebox.showinfo("Pembayaran Berhasil", msg, parent=payment_win)
 
-                # Save transaction to DB
-                try:
-                    db.save_transaksi(self.id_karyawan, keranjang, total_belanja)
-                    # Update stock for each item
-                    for item in keranjang:
-                        db.update_stok_produk(item['id_produk'], item['jumlah'])
-                except Exception as e:
-                    messagebox.showerror("Database Error", f"Gagal menyimpan transaksi: {e}", parent=payment_win)
-                    return
+                        payment_win.destroy()
+                        self.create_main_menu()
+                    except Exception as e:
+                         messagebox.showerror("Error Database", str(e), parent=payment_win)
 
-                payment_win.destroy()
-                messagebox.showinfo("Transaksi Berhasil", f"Transaksi berhasil!\n\nTotal Belanja: Rp {total_belanja:,.2f}\nJumlah Bayar: Rp {paid_amount:,.2f}\nKembalian: Rp {kembalian:,.2f}")
+            btn_frame = tk.Frame(payment_win)
+            btn_frame.pack(pady=30)
+            tk.Button(btn_frame, text="Bayar", font=('Segoe UI', 12, 'bold'), bg="#4caf50", fg="white", width=12, command=process_payment).pack(side='left', padx=10)
+            tk.Button(btn_frame, text="Batal", font=('Segoe UI', 12), bg="#f44336", fg="white", width=12, command=payment_win.destroy).pack(side='left', padx=10)
 
-                # Reset transaction screen
-                self.kasir_transaksi_screen()
+        # --- Footer Buttons ---
+        tk.Button(footer, text="Kembali ke Menu", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=20, command=self.create_main_menu).pack(side="left", padx=20, pady=10)
+        tk.Button(footer, text="Checkout", font=('Segoe UI', 11, 'bold'), bg="#4caf50", fg="white", width=20, command=open_payment_popup).pack(side="right", padx=20, pady=10)
 
-            button_frame = ttk.Frame(frame)
-            button_frame.pack(fill='x', expand=True)
-
-            ttk.Button(button_frame, text="Batal", command=payment_win.destroy, style='Secondary.TButton').pack(side='right', padx=(5, 0))
-            ttk.Button(button_frame, text="Bayar", command=_process_payment, style='Login.TButton').pack(side='right')
-
-            payment_win.bind('<Return>', lambda event: _process_payment())
-
-        ttk.Button(action_frame, text="Kembali ke Menu", command=self.create_main_menu, style='Secondary.TButton').pack(side='left')
-        ttk.Button(action_frame, text="Proses Transaksi 💳", command=_open_payment_dialog, style='Login.TButton').pack(side='right')
-
-    def laporan_penjualan_screen(self):
-        self.clear_screen()
-        container = ttk.Frame(self.root, padding=20)
-        container.pack(expand=True, fill='both')
-        container.rowconfigure(1, weight=1)
-        container.columnconfigure(0, weight=1)
-
-        ttk.Label(container, text="Laporan Penjualan", style='Header.TLabel').grid(row=0, column=0, pady=(0, 15), sticky='w')
-
+    def save_receipt_to_file(self, keranjang, total, bayar, kembalian, id_transaksi):
+        filename = f"struk_{id_transaksi}.txt"
         try:
-            laporan = db.get_laporan_penjualan()
-            cols = ("ID Transaksi", "Tanggal", "Total", "Kasir")
-            tree = ttk.Treeview(container, columns=cols, show="headings")
-
-            for col in cols:
-                tree.heading(col, text=col)
-            tree.column("Total", anchor='e')
-
-            for row in laporan:
-                total_harga_formatted = f"Rp {row['total_harga']:,}"
-                tree.insert("", tk.END, values=(row['id_transaksi'], row['tanggal_transaksi'], total_harga_formatted, row['username_login']))
-
-            tree.grid(row=1, column=0, sticky='nsew')
+            with open(filename, "w") as f:
+                f.write("========== ANGKRINGAN POS ==========\n")
+                f.write(f"ID Transaksi: {id_transaksi}\n")
+                f.write(f"Tanggal     : {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write("====================================\n")
+                for item in keranjang:
+                    f.write(f"{item['nama_produk']:<20} x{item['jumlah']:<3} {item['subtotal']:>8}\n")
+                f.write("====================================\n")
+                f.write(f"Total       : Rp {total}\n")
+                f.write(f"Tunai       : Rp {bayar}\n")
+                f.write(f"Kembali     : Rp {kembalian}\n")
+                f.write("====================================\n")
+                f.write("      Terima Kasih Kunjungannya     \n")
+                f.write("====================================\n")
         except Exception as e:
-            ttk.Label(container, text=f"Gagal memuat laporan: {e}", foreground=self.style.lookup('Danger.TButton', 'background')).grid(row=1, column=0)
-
-        ttk.Button(container, text="Kembali", command=self.create_main_menu, style='Secondary.TButton').grid(row=2, column=0, pady=(15, 0), sticky='e')
+            print(f"Failed to save receipt: {e}")
 
     def show_menu_list(self):
-        self.clear_screen()
-        container = ttk.Frame(self.root, padding=20)
-        container.pack(expand=True, fill='both')
-        container.rowconfigure(1, weight=1)
-        container.columnconfigure(0, weight=1)
+        header, content, footer = self.create_base_layout("Daftar Menu")
 
-        ttk.Label(container, text="Daftar Menu", style='Header.TLabel').grid(row=0, column=0, pady=(0, 15), sticky='w')
+        listbox = tk.Listbox(content, font=('Segoe UI', 12), width=50, height=15)
+        listbox.pack(pady=20, padx=20, fill="both", expand=True)
 
         try:
             menus = db.get_all_produk()
@@ -399,85 +341,113 @@ class AngkringanApp:
             tree.column("Stok", anchor='center')
 
             for menu in menus:
-                harga_formatted = f"Rp {menu['harga']:,}"
-                tree.insert("", tk.END, values=(menu['id_produk'], menu['nama_produk'], harga_formatted, menu['stok']))
-
-            tree.grid(row=1, column=0, sticky='nsew')
+                listbox.insert(tk.END, f"{menu['id_produk']} - {menu['nama_produk']} | Rp{menu['harga']} | Stok: {menu['stok']}")
         except Exception as e:
-            ttk.Label(container, text=f"Gagal memuat menu: {e}", foreground=self.style.lookup('Danger.TButton', 'background')).grid(row=1, column=0)
+            listbox.insert(tk.END, f"Error: {e}")
 
-        ttk.Button(container, text="Kembali", command=self.create_main_menu, style='Secondary.TButton').grid(row=2, column=0, pady=(15, 0), sticky='e')
-
-    def _create_form_screen(self, title, fields, submit_text, submit_style, submit_action):
-        self.clear_screen()
-        container = ttk.Frame(self.root, padding=20)
-        container.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
-
-        frame = ttk.Frame(container, padding=20)
-        frame.grid(row=0, column=0)
-
-        ttk.Label(frame, text=title, style='Header.TLabel').grid(row=0, column=0, columnspan=2, pady=(0, 15))
-
-        vars = {}
-        for i, (label, var_type) in enumerate(fields):
-            ttk.Label(frame, text=f"{label}:").grid(row=i+1, column=0, sticky='w', pady=2, padx=(0, 10))
-            var = var_type()
-            vars[label] = var
-            ttk.Entry(frame, textvariable=var, width=30).grid(row=i+1, column=1, sticky='ew', pady=2)
-
-        def on_submit():
-            # Pass a dictionary of values to the submit_action
-            submit_action({label: var.get() for label, var in vars.items()})
-
-        button_frame = ttk.Frame(frame)
-        button_frame.grid(row=len(fields)+1, column=0, columnspan=2, pady=(20, 0))
-
-        ttk.Button(button_frame, text="Kembali", command=self.create_main_menu, style='Secondary.TButton').pack(side='right', padx=(5,0))
-        ttk.Button(button_frame, text=submit_text, command=on_submit, style=submit_style).pack(side='right')
+        tk.Button(footer, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=20, command=self.create_main_menu).pack(pady=10)
 
     def add_menu_screen(self):
-        fields = [("ID Produk", tk.StringVar), ("Nama Produk", tk.StringVar), ("Kategori Produk", tk.StringVar), ("Harga", tk.IntVar), ("Stok", tk.IntVar)]
+        header, content, footer = self.create_base_layout("Tambah Produk")
 
-        def submit(values):
+        form_frame = tk.Frame(content, bg="#ffffff")
+        form_frame.pack(pady=20)
+
+        id_var = tk.StringVar()
+        nama_var = tk.StringVar()
+        kategori_var = tk.StringVar()
+        harga_var = tk.IntVar()
+        stok_var = tk.IntVar()
+
+        entries = [
+            ("ID Produk", id_var),
+            ("Nama Produk", nama_var),
+            ("Kategori", kategori_var),
+            ("Harga", harga_var),
+            ("Stok", stok_var)
+        ]
+
+        for label, var in entries:
+            tk.Label(form_frame, text=label, font=('Segoe UI', 11, 'bold'), bg="#ffffff").pack(anchor='w', pady=(10, 0))
+            tk.Entry(form_frame, textvariable=var, font=('Segoe UI', 11), width=40).pack(pady=(5, 5))
+
+        def submit():
             try:
                 db.insert_produk(values["ID Produk"], values["Nama Produk"], values["Kategori Produk"], values["Harga"], values["Stok"])
                 messagebox.showinfo("Sukses", "Produk berhasil ditambahkan!")
                 self.create_main_menu()
             except Exception as e:
-                messagebox.showerror("Error", f"Gagal menambahkan produk: {e}")
+                messagebox.showerror("Error", str(e))
 
-        self._create_form_screen("➕ Tambah Produk", fields, "Tambah", 'Login.TButton', submit)
+        tk.Button(footer, text="Simpan", font=('Segoe UI', 11), bg="#4caf50", fg="white", width=20, command=submit).pack(side="right", padx=20, pady=10)
+        tk.Button(footer, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=20, command=self.create_main_menu).pack(side="left", padx=20, pady=10)
 
     def update_menu_screen(self):
-        fields = [("ID Produk", tk.StringVar), ("Nama Baru", tk.StringVar), ("Kategori Baru", tk.StringVar), ("Harga Baru", tk.IntVar), ("Stok Baru", tk.IntVar)]
+        header, content, footer = self.create_base_layout("Update Produk")
 
-        def submit(values):
+        form_frame = tk.Frame(content, bg="#ffffff")
+        form_frame.pack(pady=20)
+
+        id_var = tk.StringVar()
+        nama_var = tk.StringVar()
+        kategori_var = tk.StringVar()
+        harga_var = tk.IntVar()
+        stok_var = tk.IntVar()
+
+        entries = [
+            ("ID Produk (Target)", id_var),
+            ("Nama Baru", nama_var),
+            ("Kategori Baru", kategori_var),
+            ("Harga Baru", harga_var),
+            ("Stok Baru", stok_var)
+        ]
+
+        for label, var in entries:
+            tk.Label(form_frame, text=label, font=('Segoe UI', 11, 'bold'), bg="#ffffff").pack(anchor='w', pady=(10, 0))
+            tk.Entry(form_frame, textvariable=var, font=('Segoe UI', 11), width=40).pack(pady=(5, 5))
+
+        def submit():
             try:
                 db.update_produk(values["ID Produk"], values["Nama Baru"], values["Kategori Baru"], values["Harga Baru"], values["Stok Baru"])
                 messagebox.showinfo("Sukses", "Produk berhasil diupdate!")
                 self.create_main_menu()
             except Exception as e:
-                messagebox.showerror("Error", f"Gagal mengupdate produk: {e}")
+                messagebox.showerror("Error", str(e))
 
-        self._create_form_screen("🔄 Update Produk", fields, "Update", 'Warning.TButton', submit)
+        tk.Button(footer, text="Update", font=('Segoe UI', 11), bg="#ff9800", fg="white", width=20, command=submit).pack(side="right", padx=20, pady=10)
+        tk.Button(footer, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=20, command=self.create_main_menu).pack(side="left", padx=20, pady=10)
 
     def delete_menu_screen(self):
-        fields = [("ID Produk", tk.StringVar)]
+        header, content, footer = self.create_base_layout("Hapus Produk")
 
-        def submit(values):
-            if not values["ID Produk"]:
-                messagebox.showwarning("Input Kosong", "ID Produk tidak boleh kosong.")
+        form_frame = tk.Frame(content, bg="#ffffff")
+        form_frame.pack(pady=40)
+
+        id_var = tk.StringVar()
+        tk.Label(form_frame, text="Masukkan ID Produk yang akan dihapus:", font=('Segoe UI', 12), bg="#ffffff").pack(pady=(0, 10))
+        tk.Entry(form_frame, textvariable=id_var, font=('Segoe UI', 12), width=30).pack(pady=5)
+
+        def submit():
+            prod_id = id_var.get()
+            if not prod_id:
+                messagebox.showerror("Error", "ID Produk tidak boleh kosong!")
                 return
 
-            if messagebox.askyesno("Konfirmasi Hapus", f"Apakah Anda yakin ingin menghapus produk dengan ID {values['ID Produk']}?"):
+            existing = db.get_produk_by_id(prod_id)
+            if not existing:
+                messagebox.showerror("Error", "Produk tidak ada/tidak ditemukan!")
+                return
+
+            if messagebox.askyesno("Konfirmasi", f"Hapus produk {existing['nama_produk']}?"):
                 try:
-                    db.delete_produk(values["ID Produk"])
+                    db.delete_produk(prod_id)
                     messagebox.showinfo("Sukses", "Produk berhasil dihapus!")
                     self.create_main_menu()
                 except Exception as e:
-                    messagebox.showerror("Error", f"Gagal menghapus produk: {e}")
+                    messagebox.showerror("Error", str(e))
 
-        self._create_form_screen("🗑️ Hapus Produk", fields, "Hapus", 'Danger.TButton', submit)
+        tk.Button(footer, text="Hapus", font=('Segoe UI', 11), bg="#f44336", fg="white", width=20, command=submit).pack(side="right", padx=20, pady=10)
+        tk.Button(footer, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=20, command=self.create_main_menu).pack(side="left", padx=20, pady=10)
 
 if __name__ == "__main__":
     root = tk.Tk()
