@@ -1,6 +1,5 @@
 import tkinter as tk
-from tkinter import messagebox
-from tkinter import ttk
+from tkinter import messagebox, ttk
 import db_utils as db
 import datetime
 import os
@@ -200,10 +199,12 @@ class AngkringanApp:
         keranjang = []
 
         def update_keranjang_list():
-            keranjang_listbox.delete(0, tk.END)
+            for i in keranjang_tree.get_children():
+                keranjang_tree.delete(i)
+
             total = 0
             for item in keranjang:
-                keranjang_listbox.insert(tk.END, f"{item['nama_produk']} x{item['jumlah']} = Rp{item['subtotal']}")
+                keranjang_tree.insert("", tk.END, values=(item['nama_produk'], item['jumlah'], f"Rp {item['subtotal']:,-}"))
                 total += item['subtotal']
             total_label.config(text=f"Total: Rp{total}")
             return total
@@ -331,6 +332,14 @@ class AngkringanApp:
 
         try:
             menus = db.get_all_produk()
+            cols = ("ID", "Nama Produk", "Harga", "Stok")
+            tree = ttk.Treeview(container, columns=cols, show="headings")
+            for col in cols:
+                tree.heading(col, text=col)
+
+            tree.column("Harga", anchor='e')
+            tree.column("Stok", anchor='center')
+
             for menu in menus:
                 listbox.insert(tk.END, f"{menu['id_produk']} - {menu['nama_produk']} | Rp{menu['harga']} | Stok: {menu['stok']}")
         except Exception as e:
@@ -364,7 +373,7 @@ class AngkringanApp:
 
         def submit():
             try:
-                db.insert_produk(id_var.get(), nama_var.get(), kategori_var.get(), harga_var.get(), stok_var.get())
+                db.insert_produk(values["ID Produk"], values["Nama Produk"], values["Kategori Produk"], values["Harga"], values["Stok"])
                 messagebox.showinfo("Sukses", "Produk berhasil ditambahkan!")
                 self.create_main_menu()
             except Exception as e:
@@ -399,7 +408,7 @@ class AngkringanApp:
 
         def submit():
             try:
-                db.update_produk(id_var.get(), nama_var.get(), kategori_var.get(), harga_var.get(), stok_var.get())
+                db.update_produk(values["ID Produk"], values["Nama Baru"], values["Kategori Baru"], values["Harga Baru"], values["Stok Baru"])
                 messagebox.showinfo("Sukses", "Produk berhasil diupdate!")
                 self.create_main_menu()
             except Exception as e:
