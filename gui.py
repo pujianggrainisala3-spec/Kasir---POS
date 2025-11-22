@@ -70,6 +70,7 @@ class AngkringanApp:
         # 2. Footer Frame (Packed BOTTOM so it stays fixed)
         footer_frame = tk.Frame(main_container, bg="#f5f5f5")
         footer_frame.pack(side="bottom", fill="x", pady=(10, 0))
+        self.footer_frame = footer_frame # For testability
 
         # 3. Content Frame (Middle, Expandable)
         content_outer = tk.Frame(main_container, bg="#ffffff", bd=1, relief=tk.RIDGE)
@@ -365,18 +366,18 @@ class AngkringanApp:
         form_frame = tk.Frame(content, bg="#ffffff")
         form_frame.pack(pady=20)
 
-        id_var = tk.StringVar()
-        nama_var = tk.StringVar()
-        kategori_var = tk.StringVar()
-        harga_var = tk.IntVar()
-        stok_var = tk.IntVar()
+        self.id_var = tk.StringVar()
+        self.nama_var = tk.StringVar()
+        self.kategori_var = tk.StringVar()
+        self.harga_var = tk.IntVar()
+        self.stok_var = tk.IntVar()
 
         entries = [
-            ("ID Produk", id_var),
-            ("Nama Produk", nama_var),
-            ("Kategori", kategori_var),
-            ("Harga", harga_var),
-            ("Stok", stok_var)
+            ("ID Produk", self.id_var),
+            ("Nama Produk", self.nama_var),
+            ("Kategori", self.kategori_var),
+            ("Harga", self.harga_var),
+            ("Stok", self.stok_var)
         ]
 
         for label, var in entries:
@@ -384,15 +385,18 @@ class AngkringanApp:
             tk.Entry(form_frame, textvariable=var, font=('Segoe UI', 11), width=40).pack(pady=(5, 5))
 
         def submit():
-            try:
-                db.insert_produk(values["ID Produk"], values["Nama Produk"], values["Kategori Produk"], values["Harga"], values["Stok"])
-                messagebox.showinfo("Sukses", "Produk berhasil ditambahkan!")
-                self.create_main_menu()
-            except Exception as e:
-                messagebox.showerror("Error", str(e))
+            self._submit_add_menu()
 
         tk.Button(footer, text="Simpan", font=('Segoe UI', 11), bg="#4caf50", fg="white", width=20, command=submit).pack(side="right", padx=20, pady=10)
         tk.Button(footer, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=20, command=self.create_main_menu).pack(side="left", padx=20, pady=10)
+
+    def _submit_add_menu(self):
+        try:
+            db.insert_produk(self.id_var.get(), self.nama_var.get(), self.kategori_var.get(), self.harga_var.get(), self.stok_var.get())
+            messagebox.showinfo("Sukses", "Produk berhasil ditambahkan!")
+            self.create_main_menu()
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
 
     def update_menu_screen(self):
         header, content, footer = self.create_base_layout("Update Produk")
@@ -400,18 +404,18 @@ class AngkringanApp:
         form_frame = tk.Frame(content, bg="#ffffff")
         form_frame.pack(pady=20)
 
-        id_var = tk.StringVar()
-        nama_var = tk.StringVar()
-        kategori_var = tk.StringVar()
-        harga_var = tk.IntVar()
-        stok_var = tk.IntVar()
+        self.id_var = tk.StringVar()
+        self.nama_var = tk.StringVar()
+        self.kategori_var = tk.StringVar()
+        self.harga_var = tk.IntVar()
+        self.stok_var = tk.IntVar()
 
         entries = [
-            ("ID Produk (Target)", id_var),
-            ("Nama Baru", nama_var),
-            ("Kategori Baru", kategori_var),
-            ("Harga Baru", harga_var),
-            ("Stok Baru", stok_var)
+            ("ID Produk (Target)", self.id_var),
+            ("Nama Baru", self.nama_var),
+            ("Kategori Baru", self.kategori_var),
+            ("Harga Baru", self.harga_var),
+            ("Stok Baru", self.stok_var)
         ]
 
         for label, var in entries:
@@ -419,15 +423,18 @@ class AngkringanApp:
             tk.Entry(form_frame, textvariable=var, font=('Segoe UI', 11), width=40).pack(pady=(5, 5))
 
         def submit():
-            try:
-                db.update_produk(values["ID Produk"], values["Nama Baru"], values["Kategori Baru"], values["Harga Baru"], values["Stok Baru"])
-                messagebox.showinfo("Sukses", "Produk berhasil diupdate!")
-                self.create_main_menu()
-            except Exception as e:
-                messagebox.showerror("Error", str(e))
+            self._submit_update_menu()
 
         tk.Button(footer, text="Update", font=('Segoe UI', 11), bg="#ff9800", fg="white", width=20, command=submit).pack(side="right", padx=20, pady=10)
         tk.Button(footer, text="Kembali", font=('Segoe UI', 11), bg="#607d8b", fg="white", width=20, command=self.create_main_menu).pack(side="left", padx=20, pady=10)
+
+    def _submit_update_menu(self):
+        try:
+            db.update_produk(self.id_var.get(), self.nama_var.get(), self.kategori_var.get(), self.harga_var.get(), self.stok_var.get())
+            messagebox.showinfo("Sukses", "Produk berhasil diupdate!")
+            self.create_main_menu()
+        except Exception as e:
+            messagebox.showerror("Error", str(e))
 
     def delete_menu_screen(self):
         header, content, footer = self.create_base_layout("Hapus Produk")
